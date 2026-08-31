@@ -4,9 +4,11 @@ import { resolve } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { WELL_KNOWN } from 'roadmap-module-protocol'
+import { serves } from 'roadmap-module-protocol/serve'
 import { defineConfig, type Plugin } from 'vite'
 
 import { MANIFEST, TICKET, answer } from './doors.ts'
+import { ID, PREFERRED_PORT } from './manifest.ts'
 import { page } from './page/document.ts'
 
 /**
@@ -175,6 +177,18 @@ async function body(request: IncomingMessage): Promise<Record<string, unknown> |
  * module testing something nobody ships. The `@` alias below is a different
  * thing entirely — it points at `src`, and is what shadcn's generated components
  * import through.
+ *
+ * ## And no `server.port` either, because `serves()` decides it
+ *
+ * 7960 used to be written twice — `--port "${PORT:-7960}"` in `run.sh` and
+ * `Number(process.env.PORT ?? 7960)` in `register.ts` — and true in neither
+ * place once anything else took the port, because `--strictPort` meant the
+ * module simply died. It is now `PREFERRED_PORT` in `manifest.ts`, stated once
+ * beside the id it belongs with and read by both this file and `register.ts`.
+ * See `roadmap-module-protocol/serve`: a free 7960 is taken silently, this
+ * module already answering there is an exit rather than a second copy, and
+ * anything else is a loud move to the next port with the registration rewritten
+ * to wherever the server actually bound.
  */
 export default defineConfig({
   /**
@@ -184,7 +198,7 @@ export default defineConfig({
    * fact in both.
    */
   base: './',
-  plugins: [doors(), react(), tailwindcss()],
+  plugins: [serves({ id: ID, prefer: PREFERRED_PORT }), doors(), react(), tailwindcss()],
   resolve: { alias: { '@': resolve(import.meta.dirname, 'src') } },
   build: { outDir: 'dist', emptyOutDir: true },
 })

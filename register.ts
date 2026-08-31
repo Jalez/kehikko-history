@@ -1,55 +1,62 @@
 #!/usr/bin/env bun
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { ID } from './manifest.ts'
+import { originFor, registerAt } from 'roadmap-module-protocol/serve'
+
+import { ID, PREFERRED_PORT } from './manifest.ts'
 
 /**
  * Tell a host on this machine where this app answers.
  *
- *   bun run register            # or: PORT=7960 bun run register
+ *   bun run register            # or: PORT=7961 bun run register
  *
  * A separate program from `run.sh` on purpose. Registration writes into
  * somebody's home directory and says "frame this", which is a decision a person
  * makes once; a start script that did it quietly would be making that decision on
  * their behalf every time they pressed start.
  *
- * ## The filename is the module id
+ * ## That argument still stands, and the plugin does not contradict it
  *
- * Not a field inside the file — the NAME. A host sweeps the directory and takes
- * the id from the filename, so `roadmap.history.json` is what makes this
- * `roadmap.history`. Two files naming the same port under different names are
- * two modules as far as a host is concerned.
+ * `serves()` in `vite.config.ts` now writes this same file every time the server
+ * starts, which looks like exactly what the paragraph above forbids. It is not,
+ * and the distinction is worth being precise about, because collapsing the two
+ * loses something either way round.
  *
- * ## `dir` as well as `url`
+ * ADOPTION is the decision a person makes once, and this program is it. Running
+ * this is how a module that was not on somebody's canvas gets onto it, and
+ * deleting the file is how it comes off.
  *
- * The url is where to talk to this app; the directory is where to start it. A
- * host that offers a Start button needs the second, and needs it to be a
- * DIRECTORY rather than a command line — a string a host handed to a shell would
- * make this file a place to write shell. What a host runs is `run.sh` inside
- * this directory: one script, no arguments, for exactly that reason.
+ * The ADDRESS is not a decision anybody made. Nobody chose 7960; they chose to
+ * be framed, and 7960 is a fact about where this process happened to bind — a
+ * fact that changes between one start and the next when something else has the
+ * port. A registration still naming the old number is one the host sweeps to
+ * find nothing: it reports this module as not running while it is running one
+ * port over, and offers a Start button that would spawn a second copy. Rewriting
+ * the address keeps the decision the person made TRUE. It does not make one.
  *
- * It is derived from this file's own location rather than from `process.cwd()`,
- * so `bun run register` works from anywhere and records where the program
- * actually is instead of where somebody happened to be standing.
+ * ## Which leaves this program the short one it should always have been
  *
- * ## Where a host looks
+ * The registry directory, the rule that the FILENAME carries the id, the shape
+ * of the document, and the argument for each are in
+ * `roadmap-module-protocol/serve` now — imported by this and by every other
+ * module rather than copied into fourteen repositories where one of them will
+ * eventually disagree by a character. Writing to the wrong directory is the
+ * worst failure a module can have, because the host finds nothing and finds it
+ * silently.
  *
- * This line must say exactly what a host's own registry sweep says, and it is
- * copied rather than imported because this directory is meant to stand alone.
- * Writing to the wrong directory is the worst failure a module can have: the
- * host finds nothing, and finds it silently.
+ * `dir` is still derived from this file's own location rather than from
+ * `process.cwd()`, so `bun run register` works from anywhere and records where
+ * the program actually is instead of where somebody happened to be standing.
  */
-const registryDir = process.env.ROADMAP_MODULES_DIR ?? join(homedir(), '.roadmap', 'modules')
+const port = Number(process.env.PORT ?? PREFERRED_PORT)
+const written = registerAt({
+  id: ID,
+  origin: originFor(port),
+  dir: dirname(fileURLToPath(import.meta.url)),
+})
 
-const port = Number(process.env.PORT ?? 7960)
-const url = `http://127.0.0.1:${port}`
-const dir = dirname(fileURLToPath(import.meta.url))
-
-mkdirSync(registryDir, { recursive: true })
-const file = join(registryDir, `${ID}.json`)
-writeFileSync(file, `${JSON.stringify({ url, dir }, null, 2)}\n`)
-console.log(`registered: ${file} -> ${url} (${dir})`)
+console.log(`registered: ${written.file} -> ${written.url} (${written.dir})`)
+if (written.was) console.log(`  (was ${written.was.url} in ${written.was.dir})`)
 console.log('Start the app with ./run.sh, then reload the host; it sweeps the directory on every read.')
+console.log(`If ${port} is taken, ./run.sh moves to the next free port and rewrites this file to match.`)

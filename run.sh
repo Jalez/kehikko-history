@@ -6,10 +6,22 @@
 #   - No arguments. A registration names a directory and one script inside it,
 #     never a command line: a string a host handed to a shell would make a
 #     registration file a place to write shell.
-#   - $PORT from the environment. Whoever starts this chose the port; a script
-#     that picked its own would answer somewhere nobody is looking. 7960 is the
-#     default and it is the number in the registration too — 7820 through 7950
-#     belong to the other modules on this machine.
+#   - No port, and no `--strictPort`. Both used to be here, and the number 7960
+#     was written twice — once on this line and once in `register.ts` — which is
+#     why moving a module meant editing two files and then remembering that the
+#     file in `~/.roadmap/modules` still named the old address. It is now stated
+#     once, in `vite.config.ts`, beside the id: `serves({ id: ID, prefer: 7960 })`.
+#     $PORT is still honoured, because a host that starts this passes the port
+#     from the registration and the module should prefer the address the host is
+#     about to look at; the plugin reads it.
+#
+#     What `--strictPort` bought was a module that DIED on a taken port —
+#     `Error: Port 7960 is already in use`, exit 1 — rather than one answering
+#     somewhere nobody was looking. That was the only honest option while nothing
+#     handled a collision. Now `serves()` handles it: a free 7960 is taken in
+#     silence, this module already answering there ends the start cleanly instead
+#     of making a second copy, and anything else is a loud move with the
+#     registration rewritten to the port actually bound.
 #   - `exec`, and the foreground. A script that forks and returns leaves whoever
 #     started it holding a pid that stops nothing, and Stop is only ever offered
 #     for what a host started.
@@ -26,9 +38,12 @@
 # worse than a loud absent one, and here it would mean making a repository
 # somewhere a person will never look.
 #
-# It does NOT register. Registration is a deliberate act by a person — see
-# `register.ts` — and a start script that quietly wrote into somebody's home
-# directory would be doing it on their behalf.
+# It does not register a module that had none. Adoption is a deliberate act by a
+# person — `bun run register`, see `register.ts`, and that essay stands. What the
+# Vite plugin now writes on every start is the module's ADDRESS, which is a
+# different sentence: the person decided to be framed, they did not decide to be
+# framed at 7960 in particular, and a registration still naming a port this
+# module has drifted off is one the host sweeps to find nothing.
 #
 # ## There is no build here, and no `dist`
 #
@@ -56,4 +71,4 @@ if [ ! -d node_modules ]; then
   bun install >&2
 fi
 
-exec bunx vite --host 127.0.0.1 --port "${PORT:-7960}" --strictPort
+exec bunx vite
