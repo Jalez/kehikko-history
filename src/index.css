@@ -1,0 +1,183 @@
+@import 'tailwindcss';
+
+/**
+ * The palette, in shadcn's own token names, and one rule about the LAYOUT that
+ * matters more here than the colours do.
+ *
+ * ## Container queries, not viewport breakpoints
+ *
+ * This page's normal case is a pane 220 to 400 pixels wide inside somebody's
+ * canvas, on a monitor two thousand pixels across. Every viewport breakpoint
+ * Tailwind ships would therefore fire — `lg:` is true, `xl:` is true — and the
+ * page would lay itself out for a screen it has three per cent of. So the
+ * `<body>` is a container, every responsive class in this app is a `@container`
+ * class, and the only thing any of them ever measures is the pane.
+ *
+ * ## Nothing overflows sideways, ever, and this module is the worst case
+ *
+ * A pane that scrolls horizontally is a pane where half a sentence is behind an
+ * edge nobody thinks to drag. Every module here has to be careful about it; this
+ * one has to be careful in a way the others do not, because the strings it draws
+ * are the longest and least breakable in the workspace: commit subjects,
+ * absolute paths, forty-character object names, branch names with slashes in
+ * them. One `whitespace-nowrap` on any of those sets a min-content floor wider
+ * than the pane and takes the whole layout with it — measured at 464px on a
+ * 220px viewport, against 220px with the wrapping this module ships. See the
+ * essay in `components/ui/badge.tsx`.
+ *
+ * `overflow-x: hidden` on the body would HIDE that rather than fix it, so it is
+ * not here. What is here is `overflow-wrap: anywhere` on the prose and on the
+ * one place a long string is unavoidable, and `min-width: 0` discipline on the
+ * flex children. A test at 220, 280, 320, 400 and 1200 asserts the result rather
+ * than the technique.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --radius: 0.5rem;
+
+  /*
+   * Four states this module has an opinion about, each with a colour.
+   *
+   * `done` is committed and clean. `pending` is a commit this module is about to
+   * make — a real state, and the only one a reader might otherwise mistake for
+   * nothing happening. `failed` is where a destructive press is armed, because
+   * the second press of an arm has to look different from the first. `detached`
+   * has its own colour because a detached HEAD is the one state in this pane a
+   * person can be in without understanding it, and it should not look like an
+   * ordinary branch name.
+   *
+   * The words are never dropped in favour of the colour. Colour alone is a claim
+   * a person with any kind of colour blindness cannot read.
+   */
+  --done: oklch(0.63 0.15 150);
+  --failed: oklch(0.6 0.2 25);
+  --pending: oklch(0.72 0.16 75);
+  --detached: oklch(0.66 0.13 300);
+}
+
+/*
+ * Dark, twice.
+ *
+ * `.dark` is set by the wire when a host says so, and the media query is what
+ * answers before any host has spoken — a page opened directly, or a frame in its
+ * first hundred milliseconds. `.light` is the escape hatch that makes a host's
+ * explicit "light" beat a machine set to dark, which is why the media query is
+ * guarded on its absence rather than left to win.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --border: oklch(1 0 0 / 12%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.985 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --done: oklch(0.72 0.15 150);
+    --failed: oklch(0.68 0.19 25);
+    --pending: oklch(0.79 0.15 75);
+    --detached: oklch(0.74 0.13 300);
+  }
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --done: oklch(0.72 0.15 150);
+  --failed: oklch(0.68 0.19 25);
+  --pending: oklch(0.79 0.15 75);
+  --detached: oklch(0.74 0.13 300);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-done: var(--done);
+  --color-failed: var(--failed);
+  --color-pending: var(--pending);
+  --color-detached: var(--detached);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html,
+  body {
+    background: var(--background);
+    color: var(--foreground);
+  }
+
+  /*
+   * The container every responsive class in this app measures. Named, so a
+   * `@sm/pane:` class cannot accidentally attach itself to some nested container
+   * a component introduces later.
+   */
+  body {
+    container: pane / inline-size;
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  /*
+   * Long, unbroken strings are the one thing that widens a pane past its frame,
+   * and this module draws more of them than any other: object names, branch
+   * names, absolute paths, commit subjects. Breaking them is the honest fix —
+   * the whole string stays on screen, wrapped, rather than being clipped by an
+   * `overflow: hidden` that says nothing about what is missing.
+   */
+  p,
+  li,
+  summary,
+  code,
+  input {
+    overflow-wrap: anywhere;
+  }
+}

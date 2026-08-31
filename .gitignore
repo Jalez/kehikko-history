@@ -1,0 +1,23 @@
+# No trailing slash, deliberately.
+#
+# `node_modules/` matches a DIRECTORY called node_modules and nothing else. A
+# symlink called node_modules — which is what a linked local dependency is, and
+# what several package managers create — is not a directory, so the pattern
+# misses it and the link gets committed. That has happened on this codebase once
+# already: a symlink pointing at its own parent went into a commit, and every
+# checkout afterwards failed with ELOOP.
+node_modules
+
+# The build. Nothing serves it — `run.sh` runs Vite — and a checked-in copy is a
+# second answer to "what does this page say", which disagrees with the first the
+# moment somebody edits `src/`.
+dist
+
+# Where the tests build throwaway repositories.
+#
+# Every test here that touches git makes its own project under a temporary
+# directory and deletes it again. This line is a backstop for the run that was
+# interrupted before the delete, so a half-built scratch repository can never end
+# up in a commit here — a nested `.git` inside this repository is exactly the
+# confusion this module is about, and it should not be one this module causes.
+tmp
