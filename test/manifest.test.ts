@@ -27,11 +27,17 @@ describe('a host will accept this', () => {
     expect(MANIFEST.declares.protocol).toBe(`>=${PROTOCOL} <${PROTOCOL + 1}`)
   })
 
-  test('the protocol installed is 0.11.0', () => {
+  test('the protocol installed is 0.12.0', () => {
+    /* The version is pinned by hand because `bun update` will NOT move a
+       `#main` git dependency — the resolved sha in `bun.lock` has to be edited
+       — and a stale copy fails in the quietest possible way: `parse` strips
+       fields it has never heard of without complaining. 0.12 is the one that
+       carries `roadmap-module-protocol/client`, which is the wire this module
+       stopped writing for itself. */
     const pkg = JSON.parse(
       readFileSync(join(root, 'node_modules', 'roadmap-module-protocol', 'package.json'), 'utf8'),
     ) as { version: string }
-    expect(pkg.version).toBe('0.11.0')
+    expect(pkg.version).toBe('0.12.0')
   })
 
   test('the id, the entry and the health path are the ones every other file uses', () => {

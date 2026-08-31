@@ -1,13 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { connect, type Host, type HostEvents } from './host.ts'
+import { connect, type Connection, type HostEvents } from 'roadmap-module-protocol/client'
 
 /**
  * The bridge, as one React value.
  *
- * `host.ts` is the wire and knows no React; this is the only file that turns
- * messages into state, and it is deliberately the only one. Two places driving
- * "what can this page see" would eventually disagree.
+ * `roadmap-module-protocol/client` is the wire and knows no React; this is the
+ * only file that turns messages into state, and it is deliberately the only
+ * one. Two places driving "what can this page see" would eventually disagree.
+ *
+ * ## What used to be underneath this, and the cost of it having been there
+ *
+ * `wire/host.ts` and `wire/mailbox.ts` — 418 lines, near-identical to the copy
+ * in five sibling modules. This module is the youngest in the family and it was
+ * built with a hand-written copy anyway, because its brief predated the shared
+ * client by days. That is what a delayed extraction costs: not the code already
+ * written, but the code written after the answer existed.
+ *
+ * They are one import now. Nothing this page says on the wire changed and no
+ * field starts or stops arriving — this copy already passed the context through
+ * whole. The `goto` backstop stays at 500ms, which is this module's lineage and
+ * the client's default, so it needed no option.
  *
  * ## What this module reads off a context, which is one field
  *
@@ -92,7 +105,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
   const [projectPath, setProjectPath] = useState<string | null>(null)
   const [projectName, setProjectName] = useState<string | null>(null)
   const [kept, setKept] = useState<Kept | null>(null)
-  const host = useRef<Host | null>(null)
+  const host = useRef<Connection | null>(null)
 
   /**
    * The handler, held in a ref and read at the moment a `goto` arrives.
@@ -131,21 +144,6 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
       setProjectName(typeof context.project === 'string' && context.project ? context.project : null)
     }
 
-    /**
-     * The connection is stored BEFORE the greeting is acted on, and the order is
-     * the whole of a bug that made a sibling module hang forever.
-     *
-     * `connect` subscribes to the mailbox, and the mailbox replays what has
-     * already arrived SYNCHRONOUSLY, inside that call. The greeting almost
-     * always arrives before React mounts — that is the entire reason the mailbox
-     * exists — so `onHello` fires on this line, before `host.current` has been
-     * assigned. Anything reading `host.current` then finds null and quietly does
-     * nothing. Worse, it works often enough to look fine: a race whose good
-     * outcome is the common one is the kind that ships.
-     */
-    type Arrival = [context: Context, state: string | null | undefined]
-    let ready = false
-    const early: { arrival: Arrival | null } = { arrival: null }
     const deliver = (context: Context, state: string | null | undefined) => {
       /* The kept string arrives ONLY in the greeting, and is read before the
          context is applied so the first render already has the remembered
@@ -154,18 +152,32 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
       if (state !== undefined) setKept(reading(state))
       arrived(context)
     }
-    const heldEarly = (...arrival: Arrival) => {
-      if (ready) deliver(...arrival)
-      else early.arrival = arrival
-    }
 
-    host.current = connect(id, {
-      onHello: (context, state) => heldEarly(context as unknown as Context, state),
-      onContext: (context) => heldEarly(context as unknown as Context, undefined),
+    /**
+     * The connection is stored BEFORE it is told to listen, and the order is
+     * the whole of a bug that made a sibling module hang forever.
+     *
+     * `listen()` subscribes to the mailbox, and the mailbox replays what has
+     * already arrived SYNCHRONOUSLY, inside that call. The greeting almost
+     * always arrives before React mounts — that is the entire reason the mailbox
+     * exists — so `onHello` fires on that line, and anything reading
+     * `host.current` before the assignment finds null and quietly does nothing.
+     * Worse, it works often enough to look fine: a race whose good outcome is
+     * the common one is the kind that ships.
+     *
+     * What stood here was a box that caught the too-early arrival and replayed
+     * it once the assignment was done — this module's copy of a workaround
+     * every module in the family had written for itself. `connect` and `listen`
+     * are two calls now, so the ordering is three plain lines in the order they
+     * happen.
+     */
+    const live = connect(id, {
+      onHello: (context, state) => deliver(context as unknown as Context, state),
+      onContext: (context) => deliver(context as unknown as Context, undefined),
       onGoto: (message, answer) => goto.current(message, answer),
     })
-    ready = true
-    if (early.arrival) deliver(...early.arrival)
+    host.current = live
+    live.listen()
 
     const grace = setTimeout(() => {
       setWhere((was) => (was === 'listening' ? 'unhosted' : was))
@@ -173,8 +185,10 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
 
     return () => {
       clearTimeout(grace)
-      host.current?.stop()
-      host.current = null
+      live.stop()
+      /* Cleared only if it is still ours: under StrictMode the second mount has
+         already assigned its own connection by the time some cleanups run. */
+      if (host.current === live) host.current = null
     }
   }, [id])
 
