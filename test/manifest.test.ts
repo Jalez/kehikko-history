@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { PROTOCOL, manifestSchema } from 'roadmap-module-protocol'
 
-import { ID, MANIFEST, VERSION } from '../manifest.ts'
+import { ID, MANIFEST, PREFERRED_PORT, VERSION } from '../manifest.ts'
 
 /**
  * What this module says about itself, and the two claims a host acts on.
@@ -27,17 +27,19 @@ describe('a host will accept this', () => {
     expect(MANIFEST.declares.protocol).toBe(`>=${PROTOCOL} <${PROTOCOL + 1}`)
   })
 
-  test('the protocol installed is 0.12.0', () => {
-    /* The version is pinned by hand because `bun update` will NOT move a
-       `#main` git dependency — the resolved sha in `bun.lock` has to be edited
-       — and a stale copy fails in the quietest possible way: `parse` strips
-       fields it has never heard of without complaining. 0.12 is the one that
-       carries `roadmap-module-protocol/client`, which is the wire this module
-       stopped writing for itself. */
+  test('the protocol installed is 0.13.0', () => {
+    /* The version is pinned by hand because `bun update` ALONE will not move a
+       `#main` git dependency — it takes `bun pm cache rm` first — and a stale
+       copy fails in the quietest possible way: `parse` strips fields it has
+       never heard of without complaining. 0.12 carried
+       `roadmap-module-protocol/client`, the wire this module stopped writing for
+       itself; 0.13 carries `/serve`, the port and the registration it stopped
+       deciding for itself. A copy older than that has no `serves()` at all, and
+       the failure is a Vite config that will not load. */
     const pkg = JSON.parse(
       readFileSync(join(root, 'node_modules', 'roadmap-module-protocol', 'package.json'), 'utf8'),
     ) as { version: string }
-    expect(pkg.version).toBe('0.12.0')
+    expect(pkg.version).toBe('0.13.0')
   })
 
   test('the id, the entry and the health path are the ones every other file uses', () => {
@@ -115,14 +117,39 @@ describe('what an agent is told', () => {
 })
 
 describe('the registration this module ships', () => {
-  test('run.sh and register.ts agree on the port', () => {
-    expect(readFileSync(join(root, 'run.sh'), 'utf8')).toContain('${PORT:-7960}')
-    expect(readFileSync(join(root, 'register.ts'), 'utf8')).toContain('process.env.PORT ?? 7960')
+  /**
+   * This test used to assert that `run.sh` and `register.ts` AGREED on 7960,
+   * which was the best available check while the number was written in both.
+   * It is now written in neither, so the check that replaces it is that neither
+   * of them says a port at all — because a second copy reappearing is exactly
+   * how this stops being true again.
+   */
+  test('the port is stated once, beside the id, and nowhere else', () => {
+    expect(PREFERRED_PORT).toBe(7960)
+    /* Both of the files that used to hold a copy now ASK for it by name. The
+       prose in each still says 7960 — it is discussing what was there — so the
+       check is on the import rather than on the digits. */
+    expect(readFileSync(join(root, 'register.ts'), 'utf8')).toContain("PREFERRED_PORT } from './manifest.ts'")
+    expect(readFileSync(join(root, 'vite.config.ts'), 'utf8')).toContain('prefer: PREFERRED_PORT')
+  })
+
+  /* And `--strictPort` is gone with it. It meant this module DIED on a taken
+     port, which was the only honest thing to do while nothing handled the
+     collision; the drift is now decided deliberately and written into the
+     registry, so Vite's own fallback is a second net rather than the absence of
+     one. The whole command is asserted rather than the absence of two flags,
+     because the comment above it discusses both by name. */
+  test('the start script demands no port it might not get', () => {
+    const lines = readFileSync(join(root, 'run.sh'), 'utf8')
+      .split('\n')
+      .filter((line) => line.startsWith('exec '))
+    expect(lines).toEqual(['exec bunx vite'])
   })
 
   test('the registration carries both a url and a dir', () => {
     const source = readFileSync(join(root, 'register.ts'), 'utf8')
-    expect(source).toContain('JSON.stringify({ url, dir }')
+    expect(source).toContain('registerAt(')
+    expect(source).toContain('origin: originFor(port)')
     /* From this file's own location rather than from `process.cwd()`, so
        `bun run register` works from anywhere and records where the program
        actually is. */
