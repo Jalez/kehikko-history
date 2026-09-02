@@ -132,8 +132,8 @@ export const MANIFEST: Manifest = manifestSchema.parse({
      line was 260 characters when it was first written, and the schema refused it
      at import rather than a host refusing it in somebody else's log. */
   summary:
-    'Both of a project’s histories: its own repository, and the .kehikot folder — which this module can make a '
-    + 'repository of its own, when you press for one and nothing else is already keeping it.',
+    'A project’s git history as two tabs — what is committed and what is not, with commit and discard by file. '
+    + 'The .kehikot data folder can be a repository of its own, made only when you press for one.',
   /**
    * What an agent should do about this module, given that it is here.
    *

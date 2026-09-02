@@ -6,7 +6,7 @@ import { ID, MANIFEST, VERSION } from './manifest.ts'
 export { MANIFEST }
 import { commitNow, locate, look, read, standing, watching, type Standing } from './git/committer.ts'
 import { saying, type Stance } from './git/enclosing.ts'
-import { projectRepo, restore, show, stash, switchTo, type At, type Reading } from './git/repo.ts'
+import { commitPaths, discard, projectRepo, restore, show, stash, switchTo, type At, type Reading } from './git/repo.ts'
 import { which as readWhich, type Which } from './git/names.ts'
 import { spawnGit, type GitRunner } from './git/run.ts'
 
@@ -335,7 +335,9 @@ function readingText(reading: Reading): string {
   )
   if (reading.dirty.length) {
     lines.push('', `Not committed (${reading.dirty.length}):`)
-    for (const entry of reading.dirty.slice(0, 40)) lines.push(`  ${entry.code} ${entry.path}`)
+    for (const entry of reading.dirty.slice(0, 40)) {
+      lines.push(`  ${entry.code} ${entry.kind}  ${entry.from ? `${entry.from} -> ` : ''}${entry.path}`)
+    }
     if (reading.dirty.length > 40) lines.push(`  …and ${reading.dirty.length - 40} more`)
   } else {
     lines.push('Nothing uncommitted.')
@@ -544,6 +546,31 @@ export async function answer(
     if (path === '/api/show') {
       const said = await show(root.cwd, body?.commit, git)
       return ok(said.ok ? { ok: true, said: said.said } : { ok: false, error: said.said })
+    }
+
+    /*
+     * The Uncommitted tab's two presses. Both take a list of paths the page read
+     * out of `git status` moments earlier, and both hand the list to `repo.ts`
+     * unread: every path is checked there, spelled into a literal pathspec, and
+     * never becomes anything but an argument after a `--`.
+     *
+     * `own` is whether this is the person's own repository rather than the
+     * `.kehikot` one this module made — see `commitPaths` for the two things it
+     * changes. It is decided by `which`, which `rootFor` has just resolved, and
+     * not by anything else in the body.
+     */
+    if (path === '/api/commit-paths') {
+      const made = await commitPaths(root.cwd, body?.paths, body?.message, git, wanted.value === 'project')
+      return ok(
+        made.ok
+          ? { ok: true, said: `Committed: ${made.subject}`, sha: made.sha }
+          : { ok: false, error: made.why ?? 'git refused the commit and said nothing.' },
+      )
+    }
+
+    if (path === '/api/discard') {
+      const done = await discard(root.cwd, body?.paths, git)
+      return ok(done.ok ? { ok: true, said: done.said } : { ok: false, error: done.said })
     }
   }
 
