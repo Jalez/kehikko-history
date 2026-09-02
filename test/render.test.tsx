@@ -386,6 +386,25 @@ describe('the Commits tab keeps what already worked', () => {
     }
   })
 
+  test('the three presses share the first line with the badge, and the subject has the second', () => {
+    /* They were a third line under the subject, and in a pane 340 pixels
+       tall a line that holds three icons and nothing else is the most
+       expensive line in the row. happy-dom does no layout, so what is
+       asserted is the STRUCTURE: the presses and the badge are children of
+       the one element marked as line one, and the subject is not in it. */
+    paint()
+    const line = document.querySelector('[data-line="one"]')
+    expect(line).not.toBe(null)
+    const badge = line?.querySelector('[data-slot="badge"]')
+    expect(badge?.textContent).toBe('bbbbbbb')
+    for (const name of ['Open', 'Go here', 'Restore a file']) {
+      expect(line?.contains(screen.getByRole('button', { name }))).toBe(true)
+    }
+    expect(line?.contains(screen.getByText('notes: 2 added on chapters/3_method.tex'))).toBe(false)
+    /* And the date and author are on it too, in one node beside the badge. */
+    expect(line?.textContent).toContain('2026-08-31 09:00 · Jaakko')
+  })
+
   test('restoring a file is still there, behind an arm', () => {
     const restored: [string, string, boolean][] = []
     paint({}, { onRestore: (commit, path, overwrite) => restored.push([commit, path, overwrite]) })
@@ -475,6 +494,53 @@ describe('nothing on this screen can push the pane sideways', () => {
     expect(node.className).not.toContain('whitespace-nowrap')
     expect(node.className).toContain('overflow-wrap:anywhere')
     expect(node.className).toContain('min-w-0')
+  })
+
+  test('the first line of a commit row cannot push the pane sideways either, armed or not', () => {
+    /**
+     * The presses moved up beside the badge, the date and the author, and two
+     * things on that line are unbounded: the author's name, and — once "Go
+     * here" is armed — a sentence about detached HEAD under a button that has
+     * gone back to words. The meta wraps inside a zero-basis box, and the
+     * presses group may shrink, which is what lets the armed sentence wrap
+     * on a line of its own. A `shrink-0` on that group, or a `nowrap` on the
+     * meta, is the 464px bug reachable by one press; both are asserted here
+     * because both are one-word edits somebody would make for tidiness.
+     */
+    paint({ commits: [{ sha: 'f'.repeat(40), short: 'fffffff', at: '2026-08-31T09:00:00Z', who: 'Somebody With A Rather Long Name', subject: 'x' }] })
+    const line = document.querySelector('[data-line="one"]') as HTMLElement
+    expect(line.className).toContain('flex-wrap')
+    expect(line.className).toContain('min-w-0')
+
+    const meta = line.querySelector('[data-meta]') as HTMLElement
+    expect(meta.textContent).toContain('2026-08-31 09:00 · Somebody With A Rather Long Name')
+    /* The badge is in the meta's text flow, so the date can share its line at
+       220px — a flex item beside it cost the row a third line. */
+    expect(meta.querySelector('[data-slot="badge"]')?.textContent).toBe('fffffff')
+    expect(meta.className).not.toContain('whitespace-nowrap')
+    expect(meta.className).toContain('overflow-wrap:anywhere')
+    expect(meta.className).toContain('min-w-0')
+    expect(meta.className).toContain('basis-0')
+
+    const presses = line.querySelector('[data-presses]') as HTMLElement
+    expect(presses.className).toContain('min-w-0')
+    expect(presses.className).not.toContain('shrink-0')
+
+    /* Armed: the words are back, on the same line, with the sentence under
+       them, and nothing about that changed the classes that keep it inside. */
+    fireEvent.click(screen.getByRole('button', { name: 'Go here' }))
+    const armed = screen.getByRole('button', { name: 'Check out fffffff' })
+    expect(presses.contains(armed)).toBe(true)
+    expect(presses.contains(screen.getByRole('alert'))).toBe(true)
+    expect(presses.className).not.toContain('shrink-0')
+    for (const node of line.querySelectorAll('*')) {
+      if (!node.className || typeof node.className !== 'string') continue
+      if (!node.className.includes('whitespace-nowrap')) continue
+      /* A button's label and the object-name badge are the only nowrap
+         things here, and both are bounded by construction. */
+      expect(node.matches('button, [data-slot="badge"]')).toBe(true)
+      expect((node.textContent ?? '').length).toBeLessThanOrEqual(24)
+    }
   })
 
   test('the only nowrap badges are the ones bounded by construction', () => {
