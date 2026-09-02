@@ -229,7 +229,10 @@ describe('the Uncommitted tab names each change in a word, not a porcelain code'
       ],
     })
     openUncommitted()
-    const words = [...document.querySelectorAll('[data-kind]')].map((node) => node.textContent)
+    /* The badge holds a word and, for a narrow pane, a letter; the word is
+       what is asked about here, and the letters are asserted on their own
+       further down. */
+    const words = [...document.querySelectorAll('[data-kind] [data-word]')].map((node) => node.textContent)
     expect(words).toEqual(['modified', 'new', 'deleted', 'renamed', 'untracked'])
     expect(document.body.textContent).not.toContain('??')
     expect(document.body.textContent).not.toContain(' M ')
@@ -401,8 +404,12 @@ describe('the Commits tab keeps what already worked', () => {
       expect(line?.contains(screen.getByRole('button', { name }))).toBe(true)
     }
     expect(line?.contains(screen.getByText('notes: 2 added on chapters/3_method.tex'))).toBe(false)
-    /* And the date and author are on it too, in one node beside the badge. */
-    expect(line?.textContent).toContain('2026-08-31 09:00 · Jaakko')
+    /* And the date and author are on it too, in one node beside the badge —
+       read by their long forms, because the short forms sit beside them in
+       the same node for a narrow pane (see "under 320 pixels" below). */
+    const wide = [...(line?.querySelectorAll('[data-wide]') ?? [])].map((node) => node.textContent)
+    expect(wide).toEqual(['2026-08-31 09:00', 'Jaakko'])
+    expect(line?.textContent).toContain(' · ')
   })
 
   test('restoring a file is still there, behind an arm', () => {
@@ -513,7 +520,10 @@ describe('nothing on this screen can push the pane sideways', () => {
     expect(line.className).toContain('min-w-0')
 
     const meta = line.querySelector('[data-meta]') as HTMLElement
-    expect(meta.textContent).toContain('2026-08-31 09:00 · Somebody With A Rather Long Name')
+    expect([...meta.querySelectorAll('[data-wide]')].map((node) => node.textContent)).toEqual([
+      '2026-08-31 09:00',
+      'Somebody With A Rather Long Name',
+    ])
     /* The badge is in the meta's text flow, so the date can share its line at
        220px — a flex item beside it cost the row a third line. */
     expect(meta.querySelector('[data-slot="badge"]')?.textContent).toBe('fffffff')
@@ -555,6 +565,152 @@ describe('nothing on this screen can push the pane sideways', () => {
     /* And the path itself wraps. */
     const path = screen.getByText('notes/a/really/quite/long/path/to/some/file/that/goes/on/notes.json')
     expect(path.className).toContain('overflow-wrap:anywhere')
+  })
+})
+
+/**
+ * Under 320 pixels the pane says the same things in fewer letters.
+ *
+ * happy-dom does no layout and loads no stylesheet, so it cannot know how
+ * wide the pane is. What it CAN see is that both forms of each thing are in
+ * the DOM — the short one drawn small, the long one drawn wide — and which
+ * is which: the short one is `aria-hidden` and the long one is what a screen
+ * reader gets at every width. So these assert the WORDS of each form and the
+ * attributes that keep the long one reachable, and leave the width to the
+ * browser (`dev/small.drive.mjs`), which measured 24 pixels for line one at
+ * 220 against 36 to 68 before.
+ */
+describe('under 320 pixels the pane says the same things in fewer letters', () => {
+  const short = (root: ParentNode) => [...root.querySelectorAll('[data-terse]')].map((node) => node.textContent)
+  const long = (root: ParentNode) => [...root.querySelectorAll('[data-wide]')].map((node) => node.textContent)
+
+  test('a commit row shows an age and initials, with the full time and name a hover away', () => {
+    paint({
+      commits: [
+        {
+          sha: 'b'.repeat(40),
+          short: 'bbbbbbb',
+          /* Long enough ago that the age is in years whatever the clock says
+             when this runs — an age that depends on the run is a test that
+             passes on Tuesday. */
+          at: '2020-08-31T09:00:00+03:00',
+          who: 'Jaakko Matias Rajala',
+          subject: 'x',
+        },
+      ],
+    })
+    const meta = document.querySelector('[data-meta]') as HTMLElement
+    expect(short(meta)).toEqual([expect.stringMatching(/^\d+y$/), 'JR'])
+    expect(long(meta)).toEqual(['2020-08-31 09:00', 'Jaakko Matias Rajala'])
+
+    /* The short forms are not read out — a screen reader hears the long ones
+       at every width — and the long ones are in the document, hidden from
+       sight only, and only below the boundary. */
+    for (const node of meta.querySelectorAll('[data-terse]')) {
+      expect(node.getAttribute('aria-hidden')).toBe('true')
+    }
+    for (const node of meta.querySelectorAll('[data-wide]')) {
+      expect(node.className).toMatch(/@max-(xs|sm)\/pane:sr-only/)
+      expect(node.className).not.toContain('hidden')
+    }
+
+    /* The full values are reachable by pointing, verbatim. */
+    const time = meta.querySelector('time') as HTMLElement
+    expect(time.getAttribute('dateTime')).toBe('2020-08-31T09:00:00+03:00')
+    expect(time.getAttribute('title')).toBe('2020-08-31T09:00:00+03:00')
+    expect(meta.querySelector('[title="Jaakko Matias Rajala"]')).not.toBe(null)
+  })
+
+  test('the author goes long later than the time does, because a name is not bounded', () => {
+    /* At 320 there is room for the full time beside initials, and not for a
+       full name; at 384 there is room for both. Two boundaries, and this
+       holds them apart so that "tidy them into one" is a deliberate act. */
+    paint()
+    const [time, who] = [...document.querySelectorAll('[data-meta] [data-terse]')]
+    expect(time?.className).toContain('@xs/pane:hidden')
+    expect(who?.className).toContain('@sm/pane:hidden')
+  })
+
+  test('an author git names strangely still gets initials, never an empty badge', () => {
+    paint({
+      commits: [
+        { sha: 'c'.repeat(40), short: 'ccccccc', at: '2020-01-01T00:00:00Z', who: 'jaakko.rajala@example.com', subject: 'x' },
+        { sha: 'd'.repeat(40), short: 'ddddddd', at: '2020-01-01T00:00:00Z', who: '山田太郎', subject: 'y' },
+        { sha: 'e'.repeat(40), short: 'eeeeeee', at: '2020-01-01T00:00:00Z', who: '   ', subject: 'z' },
+      ],
+    })
+    const who = [...document.querySelectorAll('[data-meta]')].map((meta) => short(meta)[1])
+    expect(who).toEqual(['JR', '山', '?'])
+  })
+
+  test('a kind is a letter, and the six letters are six different letters', () => {
+    /* The column exists so a person can tell a new file from a deleted one
+       before pressing discard. Six words that shrink to five letters would
+       be a column that lies at one row. */
+    paint({
+      dirty: [
+        dirty(' M', 'm'),
+        dirty('A ', 'n'),
+        dirty(' D', 'd'),
+        dirty('R ', 'r', 'q'),
+        dirty('??', 'u'),
+        { code: 'UU', path: 'c', from: null, kind: 'conflicted' },
+      ],
+    })
+    openUncommitted()
+    const badges = [...document.querySelectorAll('[data-kind]')]
+    const letters = badges.map((badge) => badge.querySelector('[data-letter]')?.textContent)
+    expect(letters).toEqual(['M', 'N', 'D', 'R', 'U', 'C'])
+    expect(new Set(letters).size).toBe(6)
+    for (const badge of badges) {
+      const letter = badge.querySelector('[data-letter]') as HTMLElement
+      const word = badge.querySelector('[data-word]') as HTMLElement
+      expect(letter.getAttribute('aria-hidden')).toBe('true')
+      expect(letter.className).toContain('@xs/pane:hidden')
+      expect(word.className).toContain('@max-xs/pane:sr-only')
+      /* And the word is on the badge itself, for a pointer. */
+      expect(badge.getAttribute('title')).toBe(word.textContent)
+    }
+  })
+
+  test('the tabs keep their names as icons: Uncommitted (4) is still Uncommitted (4)', () => {
+    paint({ dirty: [dirty(' M', 'a'), dirty(' M', 'b'), dirty(' M', 'c'), dirty(' M', 'd')] })
+    for (const name of ['Commits', 'Uncommitted (4)']) {
+      const tab = screen.getByRole('tab', { name })
+      expect(tab.querySelector('svg')).not.toBe(null)
+      expect(tab.getAttribute('title')).toBe(name)
+    }
+    /* The count is drawn beside the icon, not hidden with the word. */
+    const uncommitted = screen.getByRole('tab', { name: 'Uncommitted (4)' })
+    const drawnSmall = [...uncommitted.querySelectorAll('span')].filter((span) => !span.className.includes('hidden '))
+    expect(drawnSmall.map((span) => span.textContent)).toContain('4')
+  })
+
+  test('detached HEAD keeps its sentence for a reader and its object name for the eye', () => {
+    paint({ head: { branch: null, detached: true, sha: 'c'.repeat(40) }, branches: [] })
+    const badge = document.querySelector('[data-detached="yes"]') as HTMLElement
+    expect(badge.textContent).toBe('detached at ccccccc')
+    expect(badge.getAttribute('title')).toBe('detached at ccccccc')
+    const words = badge.querySelector('span') as HTMLElement
+    expect(words.textContent).toBe('detached at ')
+    expect(words.className).toContain('@max-xs/pane:sr-only')
+  })
+
+  test('an armed label wraps: "Overwrite <a long path>" is not a nowrap button', () => {
+    /* Measured before this held: the restore box armed over a 54-character
+       path set the body 73 pixels wider than a 220-pixel pane, because the
+       button it turned into was shadcn's `whitespace-nowrap`. */
+    paint()
+    fireEvent.click(screen.getByRole('button', { name: 'Restore a file' }))
+    const path = 'notes/a/really/quite/long/path/to/some/file/notes.json'
+    fireEvent.change(screen.getByRole('textbox', { name: 'File to restore' }), { target: { value: path } })
+    const rest = screen.getByRole('button', { name: 'Restore it' })
+    expect(rest.className).toContain('whitespace-nowrap')
+    fireEvent.click(rest)
+    const armed = screen.getByRole('button', { name: `Overwrite ${path}` })
+    expect(armed.className).not.toContain('whitespace-nowrap')
+    expect(armed.className).toContain('whitespace-normal')
+    expect(armed.className).toContain('overflow-wrap:anywhere')
   })
 })
 
