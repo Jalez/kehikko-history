@@ -1,4 +1,5 @@
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
+import { useEffect, useState, type ReactNode } from 'react'
 import type * as React from 'react'
 
 import { cn } from '@/lib/utils.ts'
@@ -103,8 +104,24 @@ function TooltipContent({
            x=240 on a frame 220 across. So it is capped at the frame less a
            margin as well, whichever is smaller. */
         collisionPadding={4}
+        /* `bg-background`/`text-foreground`, and NOT shadcn's `bg-popover`.
+           This app's theme has no `--popover` colour — see `index.css`, which
+           defines background, card, muted, accent, primary and four states,
+           and no popover. So `bg-popover` compiled to
+           `background-color: var(--popover)` with nothing behind it, which is
+           not an error anywhere: Tailwind emits it, the browser discards the
+           declaration, and the element keeps a TRANSPARENT background. The
+           tooltip's words were drawn straight over the commit subject
+           underneath, unreadable and looking like a rendering fault rather
+           than a missing token.
+
+           The fix is this app's own convention rather than a new token,
+           because the two other floating layers here — `dialog.tsx` and
+           `select.tsx` — already say `bg-background text-foreground`. Adding
+           `--popover` would have made one component right and left the
+           question of which of two surfaces a floating layer uses open. */
         className={cn(
-          'z-50 max-w-[min(15rem,calc(100vw-0.5rem))] rounded-md border bg-popover px-2 py-1.5 text-[0.65rem] leading-4 text-popover-foreground shadow-md [overflow-wrap:anywhere]',
+          'z-50 max-w-[min(15rem,calc(100vw-0.5rem))] rounded-md border bg-background px-2 py-1.5 text-[0.65rem] leading-4 text-foreground shadow-md [overflow-wrap:anywhere]',
           className,
         )}
         {...props}
@@ -113,6 +130,55 @@ function TooltipContent({
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   )
+}
+
+/**
+ * Shut a tooltip when the pointer leaves the page, rather than waiting for a
+ * `pointerleave` that will never arrive.
+ *
+ * ## The failure this prevents
+ *
+ * A module's page is a document inside an IFRAME. Radix closes a tooltip when
+ * the pointer leaves its trigger, which it learns from pointer events on that
+ * element. Move the pointer from the trigger to somewhere else in this page and
+ * the event fires. Move it straight OUT of the frame — onto another container,
+ * onto the host's chrome, off the window entirely — and the browser stops
+ * delivering pointer events to this document at all. No `pointerleave` is sent
+ * for the element the pointer was over, because from this document's point of
+ * view the pointer simply stopped existing.
+ *
+ * So the tooltip stays open. It is a floating box of text left standing over a
+ * pane the person is no longer pointing at, and nothing in the page will ever
+ * take it down, because everything that would has already been skipped.
+ *
+ * ## What is listened to, and why each one
+ *
+ * - `mouseleave` on the document element: the pointer left this document's box.
+ *   This is the ordinary case and the one that fires when moving to another
+ *   container in the same window.
+ * - `blur` on the window: the whole window lost focus — another application
+ *   came forward. `mouseleave` is not guaranteed for that.
+ * - `visibilitychange`: the tab or window went away entirely.
+ *
+ * All three are cheap, and all three mean the same thing to a tooltip: nobody
+ * is pointing at this any more.
+ */
+function useShutWhenPointerLeaves(shut: () => void): void {
+  useEffect(() => {
+    const root = document.documentElement
+    const gone = () => shut()
+    const hidden = () => {
+      if (document.visibilityState === 'hidden') shut()
+    }
+    root.addEventListener('mouseleave', gone)
+    window.addEventListener('blur', gone)
+    document.addEventListener('visibilitychange', hidden)
+    return () => {
+      root.removeEventListener('mouseleave', gone)
+      window.removeEventListener('blur', gone)
+      document.removeEventListener('visibilitychange', hidden)
+    }
+  }, [shut])
 }
 
 /**
@@ -132,12 +198,14 @@ function Explained({
   side = 'top',
 }: {
   reason: string
-  children: React.ReactNode
+  children: ReactNode
   side?: 'top' | 'right' | 'bottom' | 'left'
 }) {
+  const [open, setOpen] = useState(false)
+  useShutWhenPointerLeaves(() => setOpen(false))
   return (
     <TooltipProvider>
-      <Tooltip>
+      <Tooltip open={open} onOpenChange={setOpen}>
         <TooltipTrigger asChild>{children}</TooltipTrigger>
         <TooltipContent side={side}>{reason}</TooltipContent>
       </Tooltip>
@@ -160,13 +228,15 @@ function Explaining({
 }: {
   id: string
   reason: string
-  children: React.ReactNode
+  children: ReactNode
   className?: string
   side?: 'top' | 'right' | 'bottom' | 'left'
 }) {
+  const [open, setOpen] = useState(false)
+  useShutWhenPointerLeaves(() => setOpen(false))
   return (
     <TooltipProvider>
-      <Tooltip>
+      <Tooltip open={open} onOpenChange={setOpen}>
         <TooltipTrigger asChild>
           {/* Not a button: this wrapper exists so that a DISABLED child can
               still be pointed at, and a button around a button is invalid and
