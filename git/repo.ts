@@ -1,15 +1,16 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-import { KEHIKOT_DIR, kehikotDir, withKehikotIgnored, within } from 'roadmap-module-protocol'
+import { KEHIKOT_DIR, kehikotDir, within } from 'roadmap-module-protocol'
 
+import { mayInit, saying, type Stance } from './enclosing.ts'
 import { branchName, commitish, message as checkMessage, repoPath, type Which } from './names.ts'
 import type { GitRunner, GitResult } from './run.ts'
 
 /**
  * The two repositories, found rather than named — and the one this module makes.
  *
- * ## `.kehikot` is a repository of its own, and this file is what makes it one
+ * ## `.kehikot` MAY be a repository of its own, and this file is what makes it one
  *
  * The four data modules create `<project>/.kehikot/<module>/` and write JSON
  * into it. None of them makes it a repository, and none of them should: four
@@ -18,16 +19,31 @@ import type { GitRunner, GitResult } from './run.ts'
  * once. So this module owns it. `ensure()` below is the only place in this
  * workspace that runs `git init` on that folder.
  *
+ * **Two conditions, and `ensure` refuses without both.** Somebody must have
+ * pressed for it, and the repository AROUND the project must not already be
+ * keeping the folder. `git/enclosing.ts` is where that second one is worked out
+ * and why; read it before changing anything here, because it is the file that
+ * exists because this one used to run `git init` in somebody's thesis
+ * unprompted.
+ *
  * **One repository for the whole folder, not one per module.** "My work on this
  * project" is a single story: a note taken while ticking a checklist item
  * belongs in the same commit as the tick, and four repositories would be four
  * things to back up and four histories to line up by timestamp when somebody
  * wants to know what an afternoon looked like.
  *
- * ## Why a nested repository inside an ignored folder is safe
+ * ## Why a nested repository inside an IGNORED folder is safe
  *
- * This was checked before it was agreed to, because the obvious worry is that
- * `git clean` in the parent would take the whole thing away.
+ * The emphasis is load-bearing and was not there originally. Nested inside a
+ * folder the enclosing repository ignores, this is safe for the reason below.
+ * Nested inside a folder the enclosing repository TRACKS, it is not safe at all
+ * — two repositories claim the same files, git tolerates it only because the
+ * outer one had them first, and anything added afterwards behaves in ways nobody
+ * can explain. That is why `ensure` now takes a `Stance`.
+ *
+ * The `git clean` question was checked before any of this was agreed to, because
+ * the obvious worry is that `git clean` in the parent would take the whole thing
+ * away.
  *
  *     git clean -xdf   # SKIPS a nested repository. Prints "Skipping repository".
  *     git clean -xdff  # DESTROYS it. Two f's, and it is gone.
@@ -137,8 +153,26 @@ function escapes(project: string, dir: string): string | null {
  * Making the .kehikot repository
  * ------------------------------------------------------------------ */
 
+/**
+ * Where `.kehikot` stands as a repository of its own, in five words.
+ *
+ * Five rather than a boolean, because the states this has to tell apart are all
+ * "there is no repository in that folder" and they mean completely different
+ * things to the person reading the pane:
+ *
+ * - `repository` — it is one already, and this module may commit to it.
+ * - `made` — this call is what made it. The only state that reports a creation.
+ * - `waiting` — it could be one, and nobody has pressed for it. **Not a fault.**
+ * - `elsewhere` — the repository around the project already has this folder, so
+ *   this module keeps no history of its own here. Also not a fault.
+ * - `refused` — something is wrong and `why` is a sentence about it.
+ */
+export type At = 'repository' | 'made' | 'waiting' | 'elsewhere' | 'refused'
+
 export interface Ensured {
+  /** Whether there is a `.kehikot` repository of its own that this module may commit to. */
   ok: boolean
+  at: At
   /** Whether this call is what created it. False when it was already there. */
   created: boolean
   why: string | null
@@ -146,8 +180,39 @@ export interface Ensured {
 }
 
 /**
- * The `.kehikot` folder, as a git repository, creating both if they are not
- * there.
+ * What `.git.disabled` beside a folder means, and why it stops this.
+ *
+ * When the two nested repositories this module should never have made were
+ * found, they were not deleted — they were disabled, by renaming `.git` to
+ * `.git.disabled`, so that whatever was committed into them is still
+ * recoverable. A `.git.disabled` is therefore **a repository somebody set
+ * aside**, and running `git init` beside one would put a second, empty history
+ * next to it and quietly make the set-aside one unreachable from any ordinary
+ * git command.
+ *
+ * It is not treated as a repository either — it is not one; git will not read
+ * it, and pretending otherwise would mean this module reporting a history that
+ * no `git log` in that folder can show. So it is neither resurrected nor
+ * overwritten: it is named, and the person decides.
+ */
+const DISABLED = '.git.disabled'
+
+/**
+ * The `.kehikot` folder, as a git repository — but only where that is the right
+ * thing and only when somebody asked for it.
+ *
+ * ## Two conditions, and neither of them used to be checked
+ *
+ * **Somebody asked.** `asked` is false on every path that is not a press. The
+ * page used to POST this on mount, which meant opening a pane against a project
+ * left a repository in it; now the pane draws a button and the button passes
+ * `asked: true`. See `git/enclosing.ts` for the incident this comes from.
+ *
+ * **The repository around the project has not already got this folder.**
+ * `mayInit(stance)` is the whole of that test and `git/enclosing.ts` is where it
+ * is worked out. `kept` and `offered` never initialise, whatever `asked` says:
+ * there is no press, flag or setting in this module that puts a second
+ * repository over files somebody else's is keeping.
  *
  * ## The initial branch is named explicitly
  *
@@ -166,38 +231,84 @@ export interface Ensured {
  * history. Authored data is committed, derived data is not, and the file saying
  * so was written by the module that owns it. See `stageAll()`.
  *
- * ## The project's own `.gitignore` gets the `.kehikot` line, once
+ * ## What this NO LONGER does: write to the project's own `.gitignore`
  *
- * Appended by the protocol package's own `withKehikotIgnored`, which is
- * append-only and idempotent, and only when this call is what created the
- * folder. A project that has REMOVED that line has said something, and a program
- * that put it back on the next save would be overruling them every few seconds.
+ * It used to append the `.kehikot` line to `<project>/.gitignore` whenever it
+ * created the folder, and that was this module deciding, on somebody's behalf
+ * and without saying so, that their project should not keep its own copy of
+ * this material. That decision belongs to them and has a switch of its own — the
+ * host's per-project "keep .kehikot in git", which is the thing that writes and
+ * removes that line. This module now only READS the answer, via `check-ignore`.
+ *
+ * The practical consequence is the case that used to be silently decided: a
+ * project inside a repository with no rule about `.kehikot` is `offered`, not
+ * `declined`, and gets asked rather than answered.
  */
-export async function ensure(where: Where, git: GitRunner): Promise<Ensured> {
+export async function ensure(where: Where, git: GitRunner, stance: Stance, asked: boolean): Promise<Ensured> {
   const path = where.kehikot
-  const existed = existsSync(path)
+  const no = (why: string): Ensured => ({ ok: false, at: 'refused', created: false, why, path })
 
-  if (!existed) {
+  /* Only what exists can escape, and an existing folder is checked before
+     anything is read out of it. See `escapes`. */
+  if (existsSync(path)) {
+    const escaped = escapes(where.project, path)
+    if (escaped) return no(escaped)
+  }
+
+  if (existsSync(join(path, '.git'))) {
+    /*
+     * A repository is already there. That is normally the ordinary case — and
+     * once, on this machine, it was the fault: a `.kehikot` with its own `.git`
+     * inside a repository that tracks the same files. Committing into it would
+     * keep writing a second history over somebody else's, so it is reported
+     * rather than used.
+     */
+    if (stance.at === 'kept') {
+      return no(
+        `${path} has a git repository of its own AND is tracked by the repository at ${stance.root}. Two `
+        + 'repositories over the same files is a state git only half tolerates, so this module is not committing to '
+        + `either from here. Decide which history this folder belongs in: keep it in ${stance.root} and move `
+        + `${join(path, '.git')} out of the way, or add a .gitignore rule for the folder so the outer repository `
+        + 'stops claiming it. This module will not do either of those for you.',
+      )
+    }
+    return { ok: true, at: 'repository', created: false, why: null, path }
+  }
+
+  /* Asked before the `.git.disabled` check, and the order is deliberate: where
+     the enclosing repository is keeping this folder, nothing here was going to
+     initialise anyway, so a set-aside repository is not what is stopping it and
+     naming it would be answering a question nobody asked. What that person needs
+     to read is where their history already is. */
+  if (!mayInit(stance)) return { ok: false, at: 'elsewhere', created: false, why: saying(stance, path), path }
+
+  if (existsSync(join(path, DISABLED))) {
+    return no(
+      `${join(path, DISABLED)} is a git repository somebody set aside — it was renamed out of the way rather than `
+      + 'deleted, so what is in it is still recoverable. This module will not start a second history beside it and '
+      + 'will not touch it. Rename it back to .git to use it again, or move it somewhere else, and then start a '
+      + 'history here.',
+    )
+  }
+
+  /* Nothing is wrong; nobody has pressed. The folder is not created either — a
+     read that made a directory would be the same fault one step smaller. */
+  if (!asked) return { ok: false, at: 'waiting', created: false, why: saying(stance, path), path }
+
+  if (!existsSync(path)) {
     try {
       mkdirSync(path, { recursive: true })
     } catch (error) {
-      return { ok: false, created: false, why: `${path} could not be created: ${(error as Error).message}`, path }
+      return no(`${path} could not be created: ${(error as Error).message}`)
     }
-  }
-
-  /* Checked again after the create, because the only honest moment to ask where
-     a directory actually is, is once it is there. */
-  const escaped = escapes(where.project, path)
-  if (escaped) return { ok: false, created: false, why: escaped, path }
-
-  if (existsSync(join(path, '.git'))) {
-    return { ok: true, created: false, why: null, path }
+    /* Checked again after the create, because the only honest moment to ask
+       where a directory actually is, is once it is there. */
+    const escaped = escapes(where.project, path)
+    if (escaped) return no(escaped)
   }
 
   const init = await git(['init', '--initial-branch=main'], { cwd: path })
-  if (!init.ok) {
-    return { ok: false, created: false, why: `git init failed in ${path}: ${(init.err || init.out).trim()}`, path }
-  }
+  if (!init.ok) return no(`git init failed in ${path}: ${(init.err || init.out).trim()}`)
 
   const ignore = join(path, '.gitignore')
   if (!existsSync(ignore)) {
@@ -212,20 +323,7 @@ export async function ensure(where: Where, git: GitRunner): Promise<Ensured> {
     )
   }
 
-  /* And the project is told to ignore the folder, once, at the moment it is
-     created. Append-only and idempotent — see the protocol package's own note. */
-  const projectIgnore = join(where.project, '.gitignore')
-  try {
-    const current = existsSync(projectIgnore) ? readFileSync(projectIgnore, 'utf8') : ''
-    const next = withKehikotIgnored(current)
-    if (next !== current) writeFileSync(projectIgnore, next)
-  } catch {
-    /* A project whose .gitignore cannot be written is not a reason to fail the
-       repository that was just made. The folder is ignored or it is not; either
-       way the history now exists, which is what was asked for. */
-  }
-
-  return { ok: true, created: true, why: null, path }
+  return { ok: true, at: 'made', created: true, why: null, path }
 }
 
 /* ------------------------------------------------------------------ *

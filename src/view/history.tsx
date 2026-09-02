@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge.tsx'
 import { Button } from '@/components/ui/button.tsx'
 import { Arm } from '@/view/arm.tsx'
-import type { Reading, Standing, Which } from '@/store/ask.ts'
+import type { At, Reading, Standing, Which } from '@/store/ask.ts'
 
 /**
  * One repository, drawn.
@@ -28,6 +28,9 @@ import type { Reading, Standing, Which } from '@/store/ask.ts'
 export function History({
   reading,
   standing,
+  at,
+  stanceSaid,
+  kehikot,
   busy,
   onStart,
   onCommit,
@@ -40,6 +43,12 @@ export function History({
   reading: Reading
   /** How the committer stands, for the data repository. Null for the project's, which nothing commits to on its own. */
   standing: Standing | null
+  /** Where `.kehikot` stands as a repository of its own. Always `'repository'` for the project's own history. */
+  at: At
+  /** The sentence for that, composed on the server so this pane and the MCP door say the same thing. */
+  stanceSaid: string | null
+  /** `<project>/.kehikot`, so every sentence about it can name it. */
+  kehikot: string | null
   busy: boolean
   onStart: () => void
   onCommit: (message: string) => void
@@ -57,14 +66,81 @@ export function History({
 
   const data = reading.which === 'kehikot'
 
+  /*
+   * There is no repository in `.kehikot`, and the four reasons draw differently.
+   *
+   * This used to be one sentence and one button, which is what let a person
+   * press Start on a folder their own repository was already keeping. The
+   * sentence comes from the server (`saying()` in `git/enclosing.ts`), naming
+   * the folder in full, and the BUTTON is what changes: offered when a history
+   * of its own is the only one available, replaced by a commit box when the
+   * project's own repository is the one holding it, and absent when something is
+   * actually wrong.
+   */
   if (!reading.present) {
+    if (!data) {
+      return (
+        <section className="flex min-w-0 flex-col gap-2">
+          <p className="text-[0.7rem] leading-4 text-muted-foreground">{reading.absent}</p>
+        </section>
+      )
+    }
     return (
       <section className="flex min-w-0 flex-col gap-2">
-        <p className="text-[0.7rem] leading-4 text-muted-foreground">{reading.absent}</p>
-        {data ? (
-          <Button type="button" size="pane" disabled={busy} onClick={onStart} className="self-start">
-            Start this history
-          </Button>
+        <p
+          className={
+            at === 'refused'
+              ? 'min-w-0 rounded border border-failed/40 bg-failed/5 px-2 py-1.5 text-[0.65rem] leading-4 text-failed [overflow-wrap:anywhere]'
+              : 'min-w-0 text-[0.7rem] leading-4 text-muted-foreground [overflow-wrap:anywhere]'
+          }
+          data-at={at}
+        >
+          {stanceSaid ?? reading.absent}
+        </p>
+
+        {at === 'waiting' ? (
+          <>
+            <Button type="button" size="pane" disabled={busy} onClick={onStart} className="self-start">
+              Start a history here
+            </Button>
+            <p className="min-w-0 text-[0.6rem] leading-4 text-muted-foreground [overflow-wrap:anywhere]">
+              That makes a git repository inside {kehikot ?? 'that folder'} and nothing outside it, and this module
+              then commits to it a few seconds after anything in it changes. It does not touch your project’s own
+              repository, and it does not edit your .gitignore.
+            </p>
+          </>
+        ) : null}
+
+        {/* The project's own repository is the one keeping this folder, so a
+            commit is offered INTO it — by hand, one press at a time, never on
+            the debounce. `git/enclosing.ts` says why the automatic case stops at
+            the boundary of a repository this module did not make. */}
+        {at === 'elsewhere' ? (
+          <div className="flex min-w-0 flex-col gap-1">
+            <input
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              placeholder="what this was, in your words"
+              aria-label="Commit message"
+              className="min-w-0 rounded border bg-transparent px-1.5 py-1 text-[0.7rem] leading-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <Button
+              type="button"
+              size="pane"
+              disabled={busy}
+              onClick={() => {
+                onCommit(message)
+                setMessage('')
+              }}
+              className="self-start"
+            >
+              Commit this folder there
+            </Button>
+            <p className="min-w-0 text-[0.6rem] leading-4 text-muted-foreground [overflow-wrap:anywhere]">
+              One commit, carrying {kehikot ?? 'that folder'} and nothing else — anything you have staged elsewhere is
+              left staged and uncommitted. Nothing here commits on its own into a repository this module did not make.
+            </p>
+          </div>
         ) : null}
       </section>
     )

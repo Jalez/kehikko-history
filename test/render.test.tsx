@@ -47,6 +47,9 @@ const paint = (over: Partial<Reading> = {}, extra: Partial<Parameters<typeof His
     <History
       reading={reading(over)}
       standing={null}
+      at="repository"
+      stanceSaid={null}
+      kehikot="/p/.kehikot"
       busy={false}
       onStart={nothing}
       onCommit={nothing}
@@ -152,11 +155,52 @@ describe('uncommitted work is named before anything is offered over it', () => {
   })
 })
 
-describe('a data folder that is not a repository yet', () => {
-  test('says so and offers exactly one press', () => {
-    paint({ present: false, absent: '/p/.kehikot is not a repository of its own yet.' })
-    expect(document.body.textContent).toContain('not a repository of its own yet')
-    expect(screen.getByRole('button', { name: 'Start this history' })).toBeTruthy()
+/**
+ * The four ways `.kehikot` can fail to be a repository, and the fact that they
+ * are NOT one screen.
+ *
+ * This is the fix for the incident in `git/enclosing.ts`, asserted where a
+ * person would see it. The old screen had one sentence and one Start button
+ * whatever the situation was, so pressing Start on a folder the project's own
+ * repository already tracked was a thing a person could do — and did.
+ */
+describe('what is drawn when there is no repository in .kehikot', () => {
+  const absent = { present: false, absent: '/p/.kehikot is not a repository of its own.' } as const
+
+  test('waiting: the sentence names the folder, and Start is offered', () => {
+    paint(absent, {
+      at: 'waiting',
+      stanceSaid: '/p/.kehikot — the folder your modules keep this project’s material in — is not inside any git repository.',
+    })
+    /* The path, in the sentence. The sentence this replaced said "this project's
+       data folder" and was read as being about a folder called `data/`. */
+    expect(document.body.textContent).toContain('/p/.kehikot')
+    expect(screen.getByRole('button', { name: 'Start a history here' })).toBeTruthy()
+  })
+
+  test('elsewhere: no Start button at all, and a commit into the enclosing repository instead', () => {
+    paint(absent, {
+      at: 'elsewhere',
+      stanceSaid: '/p/.kehikot is already in the history of the repository at /p: git is tracking files in it.',
+    })
+    expect(document.body.textContent).toContain('already in the history of the repository at /p')
+    expect(screen.queryByRole('button', { name: 'Start a history here' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Commit this folder there' })).toBeTruthy()
+    expect(document.body.textContent).toContain('nothing else')
+  })
+
+  test('refused: the sentence is the loud kind and nothing is offered', () => {
+    paint(absent, {
+      at: 'refused',
+      stanceSaid: '/p/.kehikot/.git.disabled is a git repository somebody set aside.',
+    })
+    expect(document.body.textContent).toContain('.git.disabled')
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  test('the project’s own repository never offers to be started', () => {
+    paint({ ...absent, which: 'project' }, { at: 'waiting', stanceSaid: 'anything at all' })
+    expect(screen.queryByRole('button')).toBeNull()
   })
 })
 

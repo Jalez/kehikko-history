@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -274,6 +274,59 @@ describe('a restore names what it would overwrite before it does it', () => {
   })
 })
 
+/**
+ * The incident, at the door.
+ *
+ * The page used to POST `/api/watch` on mount and `/api/watch` used to be the
+ * thing that ran `git init`. Between them, opening a pane against somebody's
+ * project left a repository in it nobody asked for. Both halves are asserted
+ * here — one that a read acts on nothing, and one that a write without `asked`
+ * acts on nothing either.
+ */
+describe('nothing initialises without somebody asking', () => {
+  test('reading both histories runs no init and makes no directory', async () => {
+    const project = scratch()
+    rmSync(join(project, '.kehikot'), { recursive: true, force: true })
+    const { run, calls } = fakeGit()
+    await answer('GET', '/api/histories', new URLSearchParams({ project }), null, null, run)
+    expect(calls.some((args) => args[0] === 'init')).toBe(false)
+    expect(existsSync(join(project, '.kehikot'))).toBe(false)
+    rmSync(project, { recursive: true, force: true })
+  })
+
+  test('a watch with no `asked` in the body runs no init', async () => {
+    const project = scratch()
+    const { run, calls } = fakeGit()
+    const reply = await post('/api/watch', { project }, run)
+    expect(calls.some((args) => args[0] === 'init')).toBe(false)
+    expect((reply?.body as { at: string }).at).toBe('waiting')
+    rmSync(project, { recursive: true, force: true })
+  })
+
+  /* `asked` is compared to `true` rather than read as truthy, so a body that
+     carried a string, or a 1, is a body that does not initialise anything. */
+  test('`asked` has to be the boolean true, not merely truthy', async () => {
+    const project = scratch()
+    const { run, calls } = fakeGit()
+    await post('/api/watch', { project, asked: 'yes' }, run)
+    expect(calls.some((args) => args[0] === 'init')).toBe(false)
+    rmSync(project, { recursive: true, force: true })
+  })
+
+  /* And the sentence a person is shown names the folder, in full. The one it
+     replaced said "this project's data folder" and was read as being about a
+     folder called `data/`, which this module has never touched. */
+  test('the sentence about the folder names the folder', async () => {
+    const project = scratch()
+    const { run } = fakeGit()
+    const reply = await answer('GET', '/api/histories', new URLSearchParams({ project }), null, null, run)
+    const said = (reply?.body as { said: string | null }).said ?? ''
+    expect(said).toContain(locate(project).ok === true ? join(project, '.kehikot') : '.kehikot')
+    expect(said).not.toContain('this project’s data folder')
+    rmSync(project, { recursive: true, force: true })
+  })
+})
+
 describe('the data repository is never the project repository', () => {
   test('a .kehikot that is not yet a repository refuses rather than acting on the project’s', async () => {
     /* The failure this closes: `git` inside a `.kehikot` that is not a
@@ -283,8 +336,11 @@ describe('the data repository is never the project repository', () => {
     const { run, calls } = fakeGit()
     const reply = await post('/api/show', { project, which: 'kehikot', commit: 'HEAD' }, run)
     expect(reply?.status).toBe(400)
-    expect((reply?.body as { error: string }).error).toContain('not a repository of its own yet')
-    expect(calls).toHaveLength(0)
+    expect((reply?.body as { error: string }).error).toContain('not a repository of its own')
+    /* The refusal now carries WHY it is not one, which takes three reads to find
+       out — see `look()`. What must still be true is that none of them acts:
+       nothing here shows, commits, initialises or moves anything. */
+    expect(calls.every((args) => ['rev-parse', 'ls-files', 'check-ignore'].includes(args[0] ?? ''))).toBe(true)
     rmSync(project, { recursive: true, force: true })
   })
 

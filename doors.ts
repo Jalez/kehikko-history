@@ -4,8 +4,9 @@ import { ID, MANIFEST, VERSION } from './manifest.ts'
 
 /** Re-exported so `vite.config.ts` has one import for everything it serves. */
 export { MANIFEST }
-import { commitNow, locate, read, standing, watching, type Standing } from './git/committer.ts'
-import { projectRepo, restore, show, stash, switchTo, type Reading } from './git/repo.ts'
+import { commitNow, locate, look, read, standing, watching, type Standing } from './git/committer.ts'
+import { saying, type Stance } from './git/enclosing.ts'
+import { projectRepo, restore, show, stash, switchTo, type At, type Reading } from './git/repo.ts'
 import { which as readWhich, type Which } from './git/names.ts'
 import { spawnGit, type GitRunner } from './git/run.ts'
 
@@ -83,23 +84,59 @@ export interface Both {
   kehikot: Reading | null
   /** How the committer for this project is standing, or null when nothing has started one. */
   standing: Standing | null
+  /**
+   * Where `.kehikot` stands as a repository of its own — read, never acted on.
+   *
+   * The page needs this before it draws anything, and it needs it from a GET,
+   * because the alternative is what this module used to do: POST on mount and
+   * find out by having already done it.
+   */
+  at: At
+  /** What the repository around the project says about `.kehikot`, or null when no project is open. */
+  stance: Stance | null
+  /** The sentence for `at` and `stance` together, written once and read in two places. */
+  said: string | null
+  /** `<project>/.kehikot`, named so every sentence about it can carry the path. */
+  path: string | null
 }
 
+/**
+ * Both histories, and what the folder's situation is — all of it a read.
+ *
+ * Nothing here creates a directory, runs `git init`, or writes a file. That was
+ * true of the two `read` calls before and was NOT true of the page that called
+ * this, which POSTed a start alongside it on every mount. The situation now
+ * comes back in the same answer, so the page has something to draw and nothing
+ * to do.
+ */
 export async function histories(projectPath: string | null, git: GitRunner = spawnGit): Promise<Both> {
+  const nothing = { ok: true, standing: null, at: 'waiting' as At, stance: null, said: null, path: null }
   const found = locate(projectPath)
   if (found.ok === null) {
-    return { ok: true, nowhere: true, trouble: null, project: null, kehikot: null, standing: null }
+    return { ...nothing, ok: true, nowhere: true, trouble: null, project: null, kehikot: null }
   }
   if (found.ok === false) {
-    return { ok: true, nowhere: false, trouble: found.why, project: null, kehikot: null, standing: null }
+    return { ...nothing, ok: true, nowhere: false, trouble: found.why, project: null, kehikot: null, at: 'refused' }
   }
 
   const root = projectRepo(found.where.project)
-  const [own, data] = await Promise.all([
+  const [own, data, seen] = await Promise.all([
     read(root, 'project', git),
     read(found.where.kehikot, 'kehikot', git),
+    look(projectPath, git),
   ])
-  return { ok: true, nowhere: false, trouble: null, project: own, kehikot: data, standing: standing(projectPath) }
+  return {
+    ok: true,
+    nowhere: false,
+    trouble: null,
+    project: own,
+    kehikot: data,
+    standing: standing(projectPath),
+    at: seen.at,
+    stance: seen.stance,
+    said: seen.stance ? saying(seen.stance, found.where.kehikot) : seen.why,
+    path: found.where.kehikot,
+  }
 }
 
 /**
@@ -122,9 +159,16 @@ async function rootFor(
 
   if (wanted === 'kehikot') {
     if (!existsSync(`${found.where.kehikot}/.git`)) {
+      /* Why it is not one is a question with four answers and this door has to
+         give the right one — "start this history" is wrong advice for a folder
+         somebody's own repository is already keeping. `look()` creates nothing,
+         so asking it here costs three reads. */
+      const seen = await look(projectPath, git)
       return {
         ok: false,
-        why: `${found.where.kehikot} is not a repository of its own yet, so there is nothing there to act on. Start this history first — this module makes it one.`,
+        why:
+          `${found.where.kehikot} is not a repository of its own, so there is nothing there to act on. `
+          + (seen.why ?? 'Start a history for it from the History pane if you want one.'),
       }
     }
     return { ok: true, cwd: found.where.kehikot }
@@ -213,11 +257,14 @@ function tools() {
     {
       name: 'record',
       description:
-        'Commit the .kehikot data folder now, under a message you choose. Use this when you have just finished a '
-        + 'piece of work in that data — questions written, a checklist filled in, notes taken — because you know what '
-        + 'you did and the automatic message only knows what the JSON looks like now. Commits happen by themselves a '
-        + 'few seconds after any change, so nothing is lost if you do not call this; what you get by calling it is a '
-        + 'line in the log that says what the work WAS. This is the only thing that commits to that repository.',
+        'Commit the .kehikot folder now — where the Checklist, Notes, Learning and Journeys modules keep this '
+        + 'project’s material — under a message you choose. Use this when you have just finished a piece of work in '
+        + 'that data, because you know what you did and the automatic message only knows what the JSON looks like '
+        + 'now. Commits happen by themselves a few seconds after any change, so nothing is lost if you do not call '
+        + 'this; what you get by calling it is a line in the log saying what the work WAS. It commits ONLY to a '
+        + 'repository inside that folder, and it will never start one: if the project’s own repository is the one '
+        + 'keeping that folder, this refuses and says so, because a commit into somebody’s own history is a press '
+        + 'they make on the pane rather than something a tool does in their name.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -330,10 +377,13 @@ async function mcp(rpc: Rpc, git: GitRunner): Promise<Reply> {
       serverInfo: { name: ID, version: VERSION },
       instructions:
         'Two histories per project, kept apart. The project’s own git repository holds the work. The .kehikot folder '
-        + 'where four modules keep their data is a separate repository, made and committed to by this module, because '
-        + 'the project ignores that folder and its history would otherwise not exist. Commits there are automatic and '
-        + 'debounced; `record` is how you make one deliberately, with a message you chose. Nothing here moves HEAD: '
-        + 'switching branches under a running agent is a bad afternoon, so it stays a press a person makes.',
+        + 'where four modules keep their data MAY be a separate repository — it is one when the project ignores that '
+        + 'folder or has no repository at all, and it is deliberately not one when the project’s own repository '
+        + 'already tracks it, because two repositories over the same files is a state git only half tolerates. This '
+        + 'module never starts one without a person pressing for it, and never commits into a repository it did not '
+        + 'make without a person pressing for that either. Where it does commit, commits are automatic and debounced; '
+        + '`record` is how you make one deliberately, with a message you chose. Nothing here moves HEAD: switching '
+        + 'branches under a running agent is a bad afternoon, so it stays a press a person makes.',
     })
   }
   if (typeof rpc.method === 'string' && rpc.method.startsWith('notifications/')) {
@@ -441,20 +491,33 @@ export async function answer(
     if (!where) return bad(NO_PROJECT)
 
     /*
-     * Start watching this project's data folder — which is also what creates the
-     * repository, if it is not one yet.
+     * Start watching this project's data folder, and — only when `asked` is
+     * exactly `true` — make it a repository if it is not one and may be one.
      *
-     * A POST rather than something a read does on the side. Creating a directory
-     * and running `git init` inside somebody's project is an act, and an act
-     * belongs behind a press rather than behind a page load.
+     * `asked` arrives in the body and is compared to `true` rather than read as
+     * truthy, so a body that forgot the field, or carried a string, is a body
+     * that does not initialise anything. It is the difference between the page
+     * resuming commits to a repository somebody already started and the page
+     * starting one, and those two must not be one request that guesses which.
      */
     if (path === '/api/watch') {
-      const started = await watching(where, git)
-      return ok({ ok: started.ok, why: started.why, standing: started.standing, created: started.created })
+      const started = await watching(where, git, body?.asked === true)
+      return ok({
+        ok: started.ok,
+        why: started.why,
+        standing: started.standing,
+        created: started.created,
+        at: started.at,
+      })
     }
 
+    /*
+     * `press: true`, unconditionally, because this door is only reachable from
+     * this app's own page carrying this process's ticket. It is what lets a
+     * commit go into the repository the project is already in — see `commitNow`.
+     */
     if (path === '/api/commit') {
-      const said = await commitNow(where, str(body?.message, MAX_STRING) || null, git)
+      const said = await commitNow(where, str(body?.message, MAX_STRING) || null, git, true)
       return ok(said.ok ? { ok: true, said: said.said, sha: said.sha } : { ok: false, error: said.said })
     }
 

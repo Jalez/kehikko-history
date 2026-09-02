@@ -4,9 +4,16 @@ Both of a project's histories, side by side, and the one that did not exist
 before this module.
 
 A project's own git repository holds the work. `<project>/.kehikot/` — where the
-Checklist, Notes, Learning and Journeys modules keep their data — is **a git
-repository of its own**, created and committed to by this module, because the
-project ignores that folder and its history would otherwise not exist anywhere.
+Checklist, Notes, Learning and Journeys modules keep their data — **can be a git
+repository of its own**, made and committed to by this module, when the project
+ignores that folder or has no repository at all and its history would otherwise
+not exist anywhere.
+
+**When the project's own repository already keeps that folder, this module does
+not make a second one.** It looks before it initialises, it says which of the
+two situations it found and names the folder in the sentence, and it makes
+nothing at all until somebody presses. See *Look before you init*, below, and
+`git/enclosing.ts`.
 
 ```
 bun install
@@ -33,16 +40,142 @@ noticed by the person it happened to:
 > could let you control both the project's history and kehikot history
 > separately.
 
-Yes. So `.kehikot` is a repository, this module is the one thing responsible for
-making it one, and the pane shows both.
+Yes. So `.kehikot` can be a repository, this module is the one thing responsible
+for making it one, and the pane shows both.
+
+---
+
+## Look before you init
+
+This module got that last sentence wrong, in a way worth writing down at the top
+of the file rather than in a changelog.
+
+It ran `git init` inside `<project>/.kehikot/` the moment a pane learned which
+project was open. It did that in two of the user's projects without being asked,
+and one of them was the one that mattered: a thesis several levels inside a
+repository that — earlier the same day, deliberately, through the host's
+per-project "keep `.kehikot` in git" setting — had been made to **track** that
+folder. Two repositories then claimed the same files. Git tolerated it only
+because the outer one had them first.
+
+It also said, on screen: *"Started a git history for this project's data folder.
+It was not one before."* The person who read that owns a folder called `data/`,
+which this module has never touched, and reasonably concluded a program had
+started a repository in it.
+
+Both faults have the same root, which is that this module acted where it should
+have looked. The fix is a question with four answers.
+
+### The test
+
+Asked by `git`, not reimplemented — `.gitignore` has negations, directory-only
+rules, `**`, per-directory files and `core.excludesFile`, and a hand-rolled
+matcher that is right about eight of those is confidently wrong about the ninth
+in somebody's thesis.
+
+```
+git -C <project> rev-parse --show-toplevel   # is it in a repository at all?
+git -C <root>    ls-files -z -- <.kehikot>   # does that repository TRACK it?
+git -C <root>    check-ignore --quiet -- <.kehikot>   # or does it IGNORE it?
+```
+
+Run from the **project**, never from `.kehikot` — run from inside the folder,
+`--show-toplevel` answers the folder itself the moment this module has already
+made it a repository, so the check would report "no enclosing repository"
+precisely in the case it exists to catch. And **tracked is asked first**: a path
+can be both tracked and covered by a rule, and in that state git keeps tracking
+it and the rule does nothing.
+
+| what git says | what this module does |
+| --- | --- |
+| **`alone`** — no repository above it | Offers to start one. A history of its own is the only history available. |
+| **`declined`** — a `.gitignore` rule covers it | Offers to start one. That repository will never hold these files, so this is not a second history — it is the only one. |
+| **`kept`** — that repository tracks files in it | **Never initialises.** Somebody already chose where this folder's history lives. Offers a commit *into that repository* instead, by press. |
+| **`offered`** — inside a repository, no rule, nothing tracked yet | **Never initialises.** The enclosing repository has not declined it; `git status` there lists it as untracked and the next `git add` picks it up. Same offer as `kept`. |
+
+The fourth row is the one a three-answer version misses, and it is exactly the
+state the thesis was in for the minutes between the setting being flicked and the
+first commit. It is also the state of every brand-new project before anybody has
+decided anything.
+
+### It asks, and it announces
+
+Two separate decisions, both answered rather than defaulted.
+
+**Nothing initialises without a press.** The page no longer POSTs a start on
+mount; `GET /api/histories` reads the situation and creates nothing, and the pane
+draws a sentence and a button. `POST /api/watch` initialises only when the body
+carries `asked: true`, compared to the boolean rather than read as truthy. A
+project whose `.kehikot` is already a repository resumes committing without
+asking again — that press was already made once, and re-asking every page load
+would be a dialog for a decision that exists.
+
+**The sentence names the path.** What it says now:
+
+> Started a git history in `/Users/you/Projects/thing/.kehikot` — the folder your
+> modules keep this project's material in. The repository is inside that folder
+> and holds nothing outside it; your project's own repository is untouched.
+
+**And it no longer writes to your `.gitignore`.** It used to append `.kehikot`
+to `<project>/.gitignore` whenever it created the folder, which was this module
+deciding on somebody's behalf, without saying so, that their project should not
+keep its own copy of this material. That decision has a switch of its own — the
+host's per-project "keep `.kehikot` in git" — and this module now only reads the
+answer.
+
+### Committing into a repository this module did not make
+
+For `kept` and `offered`, the pane offers one press: commit `.kehikot` into the
+repository the project is already in.
+
+**There is no automatic commit in that direction, ever.** No debounce, no timer,
+no watcher, and no MCP tool that reaches it — `record` refuses and says where the
+press is. The `.kehikot` repository this module makes gets a commit three seconds
+after a write because nobody else reads it and the value there is recovery;
+somebody's own repository gets a commit when they press, because the value there
+is a log they read and forty machine-written commits a day is not one. Refusing
+costs nothing either: in that stance their own repository is already keeping the
+folder, so their next ordinary commit carries it.
+
+The mechanics are `kehikko-paper`'s, reused rather than rediscovered — that
+module worked this out against the same repository:
+
+- **By pathspec, with `--only`**: `-- :(literal,top)<.kehikot>`. Git builds the
+  commit from HEAD plus the working-tree state of those paths alone, so work
+  staged anywhere else is neither consulted nor recorded and is still staged
+  afterwards. Asserted in `test/enclosing.test.ts` against a real repository with
+  an unrelated file staged.
+- **`git add` with the same pathspec first**, because a folder never committed is
+  untracked and pathspec-mode commit refuses it. Never `git add -A`, never
+  `git add .`.
+- **Refusals rather than guesses**: detached HEAD, a merge or rebase in progress,
+  no configured identity. Each names what to do about it. The `kehikot@localhost`
+  identity fallback this module uses for its own repository is *not* used here —
+  git invents `someone@their-laptop.local` when `user.email` is unset, and a
+  commit in somebody's thesis attributed to an address that does not exist is a
+  wrong answer to "who wrote this" written into a history that keeps it.
+- **No `--no-verify`**, and hooks are re-enabled for that one call. Every other
+  call in this module passes `-c core.hooksPath=`, because a module that commits
+  on a timer must not run arbitrary code on a timer; nothing in that direction is
+  on a timer, and the repository is theirs with their hooks in it.
+
+### `.git.disabled` is a stop sign
+
+The two nested repositories found on this machine were disabled by renaming
+`.git` to `.git.disabled`, so what was committed into them is still recoverable.
+This module treats a `.git.disabled` beside the folder as neither a repository
+nor an empty space: it refuses to start a history there, names the path, and
+leaves the file alone. Rename it back or move it, and then press.
 
 ---
 
 ## The safety property this rests on, and the one flag that breaks it
 
-A git repository nested inside an ignored folder of another repository sounds
-fragile. The specific worry is `git clean`, which is what people run when they
-want a checkout back to a known state. It was checked before this design was
+A git repository nested inside an **ignored** folder of another repository sounds
+fragile. (Inside a *tracked* one it is not merely fragile, it is the fault above,
+and this module no longer makes one.) The specific worry is `git clean`, which is
+what people run when they want a checkout back to a known state. It was checked
+before this design was
 agreed to:
 
 Measured on git 2.50.1, against a project with `.kehikot/` ignored and a
@@ -115,6 +248,12 @@ better than any diff of the resulting JSON. The `record` MCP tool commits now,
 under a message the agent chose. Nothing is lost by not calling it — the
 automatic commit still happens — what is gained is a log line saying what the
 work *was*.
+
+It commits **only to a repository inside `.kehikot`, and it never starts one.**
+Where the project's own repository is the one keeping that folder, `record`
+refuses and says where the press is. An agent writing a line into somebody's own
+history, in their name, is not something a tool description saying "be careful"
+prevents; not having the tool is.
 
 ---
 
@@ -252,6 +391,8 @@ register.ts        ~/.roadmap/modules/roadmap.history.json — url and dir
 git/run.ts         the seam: spawn with an array, shell:false, an allowlist
 git/names.ts       every string that reaches an argument, and the rules
 git/repo.ts        finding, fencing, initialising, reading, moving, restoring
+git/enclosing.ts   look before you init: the four answers, and the one commit
+                   this module makes into a repository it did not make
 git/describe.ts    diffing JSON into a commit message
 git/committer.ts   the watcher, the debounce, and the one-committer lock
 
