@@ -152,16 +152,27 @@ describe('the row above the tabs: branch and commit', () => {
     expect(screen.queryByText(/Switching branches is off/)).toBe(null)
   })
 
-  test('the select is disabled while anything is uncommitted, and says why', () => {
+  test('the select is disabled while anything is uncommitted, and the reason is attached to it', () => {
     paint({ dirty: [dirty(' M', 'notes/notes.json'), dirty('??', 'checklist/new.json')] })
     const select = screen.getByRole('combobox', { name: 'Branch' })
     expect(select.hasAttribute('disabled')).toBe(true)
     expect(select.getAttribute('data-frozen')).toBe('dirty')
-    /* One line, pointing at the tab where the changes are — not git's refusal
-       rewritten. Git's own words arrive from `switchTo` for the cases this
-       row cannot see coming. */
-    expect(document.body.textContent).toContain('Switching branches is off while 2 changes are uncommitted')
-    expect(document.body.textContent).toContain('in the Uncommitted tab')
+    /* The reason is a tooltip now rather than a paragraph — a permanent three
+       lines of a 220-pixel column, read once, is not what that space is for.
+       A tooltip cannot be hovered in this harness and a disabled control
+       cannot be hovered at all, which is exactly why `Explaining` also puts
+       the sentence in the DOM and points at it with `aria-describedby`. That
+       is what a screen reader reaches, so it is what this asserts. */
+    const described = document.getElementById('branch-frozen')
+    expect(described?.textContent).toContain('Moving to another branch or commit is off while 2 changes are uncommitted')
+    expect(described?.textContent).toContain('in the Uncommitted tab')
+    expect(described?.className).toContain('sr-only')
+  })
+
+  test('the reason is nowhere on screen when the tree is clean', () => {
+    paint()
+    expect(document.getElementById('branch-frozen')).toBe(null)
+    expect(document.body.textContent).not.toContain('Moving to another branch or commit is off')
   })
 
   test('detached HEAD is said as such, in the select and the badge and a sentence', () => {
@@ -336,10 +347,43 @@ describe('discarding takes a dialog AND two presses, and never a single click', 
 })
 
 describe('the Commits tab keeps what already worked', () => {
-  test('an arm over a dirty tree says the move will be refused rather than done', () => {
-    paint({ dirty: [dirty(' M', 'notes/notes.json')] })
-    fireEvent.click(screen.getByRole('button', { name: 'Go here' }))
-    expect(screen.getByRole('alert').textContent).toContain('refuse this rather than do it')
+  test('going to a commit is frozen over a dirty tree, for the branch select’s reason', () => {
+    /* Going to a commit and switching branch are one command, so they are one
+       rule. This used to be pressable: an arm that warned, on the second
+       press, that git was about to refuse — two presses to learn what grey
+       says for free. */
+    const moved: unknown[] = []
+    paint({ dirty: [dirty(' M', 'notes/notes.json')] }, { onMove: (target) => moved.push(target) })
+    const go = screen.getByRole('button', { name: 'Go here' })
+    expect(go.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(go)
+    expect(moved).toHaveLength(0)
+    const described = document.getElementById(`gohere-${'b'.repeat(40)}`)
+    expect(described?.textContent).toContain('Moving to another branch or commit is off while 1 change is uncommitted')
+  })
+
+  test('over a clean tree it is an armed icon that still warns about detaching', () => {
+    const moved: unknown[] = []
+    paint({}, { onMove: (target) => moved.push(target) })
+    const go = screen.getByRole('button', { name: 'Go here' })
+    expect(go.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(go)
+    expect(moved).toHaveLength(0)
+    expect(screen.getByRole('alert').textContent).toContain('detached HEAD')
+    fireEvent.click(screen.getByRole('button', { name: `Check out bbbbbbb` }))
+    expect(moved).toEqual([{ commit: 'b'.repeat(40) }])
+  })
+
+  test('the three presses are icons named by their labels, not words in the row', () => {
+    /* The words are still the accessible names — nothing is lost to a screen
+       reader or to a test — but they are not forty words of chrome down a
+       column forty commits long. */
+    paint()
+    for (const name of ['Open', 'Go here', 'Restore a file']) {
+      const button = screen.getByRole('button', { name })
+      expect(button.textContent).toBe('')
+      expect(button.querySelector('svg')).not.toBe(null)
+    }
   })
 
   test('restoring a file is still there, behind an arm', () => {

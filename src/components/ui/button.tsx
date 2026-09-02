@@ -26,6 +26,10 @@ const buttonVariants = cva(
         sm: 'h-8 rounded-md px-3',
         pane: 'h-6 rounded px-2 text-xs',
         icon: 'size-8',
+        /* An icon press sized for the pane, the same 24 pixels tall as `pane`
+           so a row of the two lines up. Square, because there is no label to
+           set its width — the label is in the tooltip and the aria-label. */
+        paneIcon: 'size-6 rounded',
       },
     },
     defaultVariants: { variant: 'default', size: 'default' },
