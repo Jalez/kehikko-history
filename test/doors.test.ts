@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { TICKET, answer } from '../doors.ts'
 import type { GitResult, GitRunner } from '../git/run.ts'
-import { locate } from '../git/repo.ts'
+import { locate, parseStatus } from '../git/repo.ts'
 
 /**
  * Every door, with git injected and no `git` binary run.
@@ -210,7 +210,7 @@ describe('a checkout is refused over uncommitted work, and names it', () => {
     const project = scratch()
     mkdirSync(join(project, '.kehikot', '.git'), { recursive: true })
     const { run, calls } = fakeGit({
-      'status --porcelain': { ok: true, out: ' M notes/notes.json\n?? notes/draft.json\n' },
+      'status --porcelain -z': { ok: true, out: ' M notes/notes.json\0?? notes/draft.json\0' },
     })
     const reply = await post('/api/switch', { project, which: 'kehikot', branch: 'main' }, run)
     const body = reply?.body as { ok: boolean; error: string; wouldLose: string[] }
@@ -227,7 +227,7 @@ describe('a checkout is refused over uncommitted work, and names it', () => {
     const project = scratch()
     mkdirSync(join(project, '.kehikot', '.git'), { recursive: true })
     const { run, calls } = fakeGit({
-      'status --porcelain': { ok: true, out: '' },
+      'status --porcelain -z': { ok: true, out: '' },
       'symbolic-ref --quiet --short HEAD': { ok: true, out: 'main\n' },
     })
     const reply = await post('/api/switch', { project, which: 'kehikot', commit: 'a1b2c3d' }, run)
@@ -355,5 +355,215 @@ describe('the data repository is never the project repository', () => {
     expect(found.ok === false && found.why).toContain('outside')
     rmSync(project, { recursive: true, force: true })
     rmSync(elsewhere, { recursive: true, force: true })
+  })
+})
+
+/**
+ * The Uncommitted tab's two doors.
+ *
+ * Both take a list of paths the page read out of `git status`, and the thing
+ * worth asserting is the argument array: every path is checked, spelled into a
+ * literal pathspec, and placed after a `--`; nothing is `add -A`ed; nothing is
+ * `restore`d or `clean`ed; and the identity and hook rules follow which
+ * repository it is.
+ */
+describe('committing some of what is uncommitted, by name', () => {
+  /** A project whose .kehikot is a repository of its own, so `which: 'kehikot'` resolves. */
+  const withRepo = () => {
+    const project = scratch()
+    mkdirSync(join(project, '.kehikot', '.git'), { recursive: true })
+    return project
+  }
+
+  test('a path that climbs out, or is an option, is refused before git is asked', async () => {
+    const project = withRepo()
+    const { run, calls } = fakeGit()
+    for (const path of ['../../etc/passwd', '--output=/tmp/x', '/etc/passwd']) {
+      const reply = await post('/api/commit-paths', { project, which: 'kehikot', paths: [path], message: 'x' }, run)
+      expect((reply?.body as { ok: boolean }).ok).toBe(false)
+    }
+    expect(calls.every((args) => args[0] !== 'commit' && args[0] !== 'add')).toBe(true)
+    rmSync(project, { recursive: true, force: true })
+  })
+
+  test('an empty message is refused with the sentence from names.ts, and nothing runs', async () => {
+    const project = withRepo()
+    const { run, calls } = fakeGit()
+    const reply = await post('/api/commit-paths', { project, which: 'kehikot', paths: ['a.json'], message: '  ' }, run)
+    const body = reply?.body as { ok: boolean; error: string }
+    expect(body.ok).toBe(false)
+    expect(body.error).toContain('A commit needs a message')
+    expect(calls.every((args) => args[0] !== 'commit')).toBe(true)
+    rmSync(project, { recursive: true, force: true })
+  })
+
+  test('only the untracked paths are added; the commit is --only, after a --, with literal pathspecs', async () => {
+    const project = withRepo()
+    const { run, calls } = fakeGit({
+      /* The page ticked a modified file, a new folder and a rename; git says which is untracked. */
+      status: { ok: true, out: ' M notes/notes.json\0?? questions/\0R  b.json\0a.json\0' },
+      'config --get user.name': { ok: true, out: 'Jaakko\n' },
+      'config --get user.email': { ok: true, out: 'j@example.com\n' },
+      'rev-parse HEAD': { ok: true, out: 'f'.repeat(40) },
+    })
+    const reply = await post(
+      '/api/commit-paths',
+      { project, which: 'kehikot', paths: ['notes/notes.json', 'questions/', 'b.json', 'a.json'], message: 'three things' },
+      run,
+    )
+    const body = reply?.body as { ok: boolean; said: string; sha: string }
+    expect(body.ok).toBe(true)
+    expect(body.said).toBe('Committed: three things')
+    expect(body.sha).toBe('f'.repeat(40))
+
+    const add = calls.find((args) => args.includes('add'))
+    expect(add).toEqual(['add', '--', ':(literal,top)questions'])
+    const commit = calls.find((args) => args.includes('commit'))
+    expect(commit).toEqual([
+      'commit',
+      '--only',
+      '--cleanup=whitespace',
+      '-m',
+      'three things',
+      '--',
+      ':(literal,top)notes/notes.json',
+      ':(literal,top)questions',
+      ':(literal,top)b.json',
+      ':(literal,top)a.json',
+    ])
+    /* Never the whole repository. */
+    expect(calls.some((args) => args.includes('-A') || args.includes('.'))).toBe(false)
+    rmSync(project, { recursive: true, force: true })
+  })
+
+  test('into the project’s own repository: hooks are on, and no identity is a refusal rather than a fallback', async () => {
+    const project = scratch()
+    const { run, calls } = fakeGit({
+      'rev-parse --show-toplevel': { ok: true, out: project },
+      'symbolic-ref --quiet HEAD': { ok: true, out: 'refs/heads/main' },
+      'config --get user.name': { ok: true, out: '' },
+    })
+    const reply = await post('/api/commit-paths', { project, which: 'project', paths: ['a.tex'], message: 'draft' }, run)
+    const body = reply?.body as { ok: boolean; error: string }
+    expect(body.ok).toBe(false)
+    expect(body.error).toContain('has no user.name')
+    expect(calls.every((args) => !args.includes('commit'))).toBe(true)
+
+    /* With an identity, the commit runs with the repository's own hooks. */
+    const identified = fakeGit({
+      'rev-parse --show-toplevel': { ok: true, out: project },
+      'symbolic-ref --quiet HEAD': { ok: true, out: 'refs/heads/main' },
+      'config --get user.name': { ok: true, out: 'Jaakko' },
+      'config --get user.email': { ok: true, out: 'j@example.com' },
+      status: { ok: true, out: ' M a.tex\0' },
+    })
+    const made = await post('/api/commit-paths', { project, which: 'project', paths: ['a.tex'], message: 'draft' }, identified.run)
+    expect((made?.body as { ok: boolean }).ok).toBe(true)
+    const commit = identified.calls.find((args) => args.includes('commit'))
+    expect(commit?.slice(0, 3)).toEqual(['-c', 'core.hooksPath=.git/hooks', 'commit'])
+    expect(commit).not.toContain('user.name=kehikot')
+    rmSync(project, { recursive: true, force: true })
+  })
+
+  test('git’s own refusal comes back verbatim', async () => {
+    const project = withRepo()
+    const { run } = fakeGit({
+      'config --get user.name': { ok: true, out: 'a' },
+      'config --get user.email': { ok: true, out: 'a@b' },
+      commit: { ok: false, err: 'error: cannot commit during a merge, or whatever git actually said\n' },
+    })
+    const reply = await post('/api/commit-paths', { project, which: 'kehikot', paths: ['a.json'], message: 'x' }, run)
+    const body = reply?.body as { ok: boolean; error: string }
+    expect(body.ok).toBe(false)
+    expect(body.error).toBe('error: cannot commit during a merge, or whatever git actually said')
+    rmSync(project, { recursive: true, force: true })
+  })
+})
+
+describe('discarding some of what is uncommitted, by name', () => {
+  test('it is a scoped stash — never a restore, never a clean, never a -f', async () => {
+    const project = scratch()
+    mkdirSync(join(project, '.kehikot', '.git'), { recursive: true })
+    const { run, calls } = fakeGit({ stash: { ok: true, out: 'Saved working directory and index state\n' } })
+    const reply = await post('/api/discard', { project, which: 'kehikot', paths: ['notes/notes.json', 'questions/'] }, run)
+    const body = reply?.body as { ok: boolean; said: string }
+    expect(body.ok).toBe(true)
+    expect(body.said).toContain('Discarded the changes to 2 files')
+    expect(body.said).toContain('git stash pop')
+    const stash = calls.find((args) => args[0] === 'stash')
+    expect(stash).toEqual([
+      'stash',
+      'push',
+      '--include-untracked',
+      '-m',
+      'discarded from the History pane',
+      '--',
+      ':(literal,top)notes/notes.json',
+      ':(literal,top)questions',
+    ])
+    expect(calls.every((args) => args[0] !== 'restore' && args[0] !== 'clean' && !args.includes('-f'))).toBe(true)
+    rmSync(project, { recursive: true, force: true })
+  })
+
+  test('nothing left to discard is said as nothing, not as success', async () => {
+    const project = scratch()
+    mkdirSync(join(project, '.kehikot', '.git'), { recursive: true })
+    const { run } = fakeGit({ stash: { ok: true, out: 'No local changes to save\n' } })
+    const reply = await post('/api/discard', { project, which: 'kehikot', paths: ['a.json'] }, run)
+    const body = reply?.body as { ok: boolean; said: string }
+    expect(body.ok).toBe(true)
+    expect(body.said).toContain('nothing was discarded')
+    rmSync(project, { recursive: true, force: true })
+  })
+
+  test('an empty list, or a bad path, never reaches a stash', async () => {
+    const project = scratch()
+    mkdirSync(join(project, '.kehikot', '.git'), { recursive: true })
+    const { run, calls } = fakeGit()
+    const none = await post('/api/discard', { project, which: 'kehikot', paths: [] }, run)
+    expect((none?.body as { ok: boolean; error: string }).error).toContain('Name at least one file')
+    const bad = await post('/api/discard', { project, which: 'kehikot', paths: ['-r'] }, run)
+    expect((bad?.body as { ok: boolean }).ok).toBe(false)
+    expect(calls.every((args) => args[0] !== 'stash')).toBe(true)
+    rmSync(project, { recursive: true, force: true })
+  })
+})
+
+describe('what git status says is folded into a word, and a rename keeps both names', () => {
+  test('the porcelain pair becomes a kind, and the pair is kept beside it', () => {
+    const out = ' M a\0M  b\0MM c\0A \0d\0 D e\0D  f\0R  new\0old\0C  copy\0orig\0?? g/\0UU h\0AA i\0DD j\0'
+    /* `A \0d` above is a typo on purpose: a record shorter than four bytes is skipped, not crashed on. */
+    const parsed = parseStatus(out)
+    const kinds = Object.fromEntries(parsed.map((one) => [one.path, one.kind]))
+    expect(kinds).toEqual({
+      a: 'modified',
+      b: 'modified',
+      c: 'modified',
+      e: 'deleted',
+      f: 'deleted',
+      new: 'renamed',
+      copy: 'new',
+      'g/': 'untracked',
+      h: 'conflicted',
+      i: 'conflicted',
+      j: 'conflicted',
+    })
+    expect(parsed.find((one) => one.path === 'new')?.from).toBe('old')
+    expect(parsed.find((one) => one.path === 'copy')?.from).toBe('orig')
+    expect(parsed.find((one) => one.path === 'a')?.from).toBe(null)
+    expect(parsed.find((one) => one.path === 'a')?.code).toBe(' M')
+  })
+
+  test('the reading a page gets carries the kind, through the door', async () => {
+    const project = scratch()
+    mkdirSync(join(project, '.kehikot', '.git'), { recursive: true })
+    const { run } = fakeGit({
+      'rev-parse --show-toplevel': { ok: true, out: join(project, '.kehikot') },
+      'status --porcelain -z': { ok: true, out: '?? notes/\0 M checklist/items.json\0' },
+    })
+    const reply = await answer('GET', '/api/histories', new URLSearchParams({ project }), null, null, run)
+    const data = (reply?.body as { kehikot: { dirty: { kind: string; path: string }[] } }).kehikot
+    expect(data.dirty.map((one) => `${one.kind} ${one.path}`)).toEqual(['untracked notes/', 'modified checklist/items.json'])
+    rmSync(project, { recursive: true, force: true })
   })
 })

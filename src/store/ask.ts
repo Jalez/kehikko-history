@@ -1,7 +1,7 @@
 import type { Both } from '../../doors.ts'
 import type { Standing } from '../../git/committer.ts'
 import type { Stance } from '../../git/enclosing.ts'
-import type { At, Branch, Commit, Dirty, Head, Reading } from '../../git/repo.ts'
+import type { At, Branch, Commit, Dirty, Head, Kind, Reading } from '../../git/repo.ts'
 import type { Which } from '../../git/names.ts'
 
 /**
@@ -31,7 +31,7 @@ import type { Which } from '../../git/names.ts'
  * page that loads and never answers the host's greeting.
  */
 
-export type { At, Both, Branch, Commit, Dirty, Head, Reading, Stance, Standing, Which }
+export type { At, Both, Branch, Commit, Dirty, Head, Kind, Reading, Stance, Standing, Which }
 
 /**
  * The ticket, read once off the inert JSON island the document carries.
@@ -124,11 +124,6 @@ export async function start(projectPath: string, asked: boolean): Promise<Starte
   return (await response.json()) as Started
 }
 
-/** Commit the data folder now, under a message somebody typed — or the derived one when it is blank. */
-export function commit(projectPath: string, message: string | null): Promise<Said> {
-  return post('/api/commit', { project: projectPath, message })
-}
-
 /** Move HEAD. Refused outright when anything is uncommitted; see `switchTo` in `git/repo.ts`. */
 export function move(
   projectPath: string,
@@ -149,9 +144,29 @@ export function restore(
   return post('/api/restore', { project: projectPath, which, commit: commitName, path, overwrite })
 }
 
-/** Put uncommitted work aside — the way forward this module offers instead of forcing anything. */
-export function stash(projectPath: string, which: Which): Promise<Said> {
-  return post('/api/stash', { project: projectPath, which })
+/**
+ * Commit some of what is uncommitted — the ticked rows — under a message somebody typed.
+ *
+ * A rename is sent as both of its paths. `git status` reports it as one entry
+ * with a `from`, the page shows it as one row, and the commit has to name both
+ * halves or git records the old path as deleted and the new one as added.
+ */
+export function commitPaths(projectPath: string, which: Which, entries: Dirty[], message: string): Promise<Said> {
+  return post('/api/commit-paths', { project: projectPath, which, paths: pathsOf(entries), message })
+}
+
+/** Take the ticked rows' changes out of the working tree. They go on the stash; see `discard` in `git/repo.ts`. */
+export function discard(projectPath: string, which: Which, entries: Dirty[]): Promise<Said> {
+  return post('/api/discard', { project: projectPath, which, paths: pathsOf(entries) })
+}
+
+function pathsOf(entries: Dirty[]): string[] {
+  const paths: string[] = []
+  for (const entry of entries) {
+    paths.push(entry.path)
+    if (entry.from) paths.push(entry.from)
+  }
+  return paths
 }
 
 /** One commit in full. */

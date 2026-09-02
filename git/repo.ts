@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 
 import { KEHIKOT_DIR, kehikotDir, within } from 'roadmap-module-protocol'
 
-import { mayInit, saying, type Stance } from './enclosing.ts'
+import { hooked, mayInit, refusal, saying, type Stance } from './enclosing.ts'
 import { branchName, commitish, message as checkMessage, repoPath, type Which } from './names.ts'
 import type { GitRunner, GitResult } from './run.ts'
 
@@ -353,10 +353,46 @@ export interface Head {
   sha: string | null
 }
 
+/**
+ * What kind of change an uncommitted entry is, in a word a person reads.
+ *
+ * `git status --porcelain` says ` M`, `A `, `??`, `R ` — two columns, index and
+ * working tree, and the meaning is the pair. The page used to print that pair
+ * in a badge, and nobody who has not read the manual page knows that `A ` and
+ * `??` are both a new file, or that the difference between them is a staging
+ * area this pane never shows. So the pair is folded into one word here, once,
+ * where the porcelain is parsed — and the pair is kept beside it, because an
+ * agent reading the MCP door may well know the manual page and should not be
+ * given less than git said.
+ *
+ * `untracked` is kept apart from `new`, and the reason is what `??` on a folder
+ * means: git has not looked inside it. `?? checklist/` is one row for however
+ * many files are in there, and committing it commits all of them, which a
+ * person should be told with a different word from the one for a single file
+ * they added.
+ */
+export type Kind = 'modified' | 'new' | 'deleted' | 'renamed' | 'untracked' | 'conflicted'
+
 export interface Dirty {
   /** `git status --porcelain` two-character code, e.g. ` M`, `??`, `A `. */
   code: string
   path: string
+  kind: Kind
+  /** For a rename or a copy, where the file was before. Null for everything else. */
+  from: string | null
+}
+
+export function kindOf(code: string): Kind {
+  const index = code[0] ?? ' '
+  const tree = code[1] ?? ' '
+  if (code === '??') return 'untracked'
+  /* Both sides of a merge touched it. Any `U`, or the two both-sides codes git
+     writes without a `U` in them. */
+  if (index === 'U' || tree === 'U' || code === 'AA' || code === 'DD') return 'conflicted'
+  if (tree === 'D' || index === 'D') return 'deleted'
+  if (index === 'R') return 'renamed'
+  if (index === 'A' || index === 'C') return 'new'
+  return 'modified'
 }
 
 export interface Reading {
@@ -448,7 +484,7 @@ export async function read(root: string, which: Which, git: GitRunner): Promise<
     git(['rev-parse', 'HEAD'], { cwd }),
     git(['log', `--max-count=${PAGE}`, LOG_FORMAT], { cwd }),
     git(['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${FIELD}%(objectname)`, 'refs/heads/'], { cwd }),
-    git(['status', '--porcelain'], { cwd }),
+    git(['status', '--porcelain', '-z'], { cwd }),
   ])
 
   const branch = headRef.ok ? headRef.out.trim() || null : null
@@ -521,12 +557,32 @@ function parseBranches(out: string, current: string | null): Branch[] {
     .filter((branch) => branch.name)
 }
 
-function parseStatus(out: string): Dirty[] {
-  return out
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => ({ code: line.slice(0, 2), path: line.slice(3) }))
-    .filter((entry) => entry.path)
+/**
+ * `git status --porcelain -z`, walked record by record.
+ *
+ * `-z` for the reason `staged()` below gives: a path with a space, a quote or a
+ * newline in it is quoted and escaped in the line-oriented format, and the
+ * unquoting is a parser nobody should write twice. Under `-z` a rename is two
+ * records — the new name, then the old one — and both are kept on one entry,
+ * because the page shows one row for a rename and the commit that carries it
+ * has to name both paths or git records a delete and an add instead.
+ */
+export function parseStatus(out: string): Dirty[] {
+  const records = out.split('\0')
+  const entries: Dirty[] = []
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index] ?? ''
+    if (record.length < 4) continue
+    const code = record.slice(0, 2)
+    const path = record.slice(3)
+    let from: string | null = null
+    if (code[0] === 'R' || code[0] === 'C') {
+      index += 1
+      from = records[index] || null
+    }
+    entries.push({ code, path, kind: kindOf(code), from })
+  }
+  return entries
 }
 
 /* ------------------------------------------------------------------ *
@@ -688,7 +744,7 @@ export async function switchTo(
   target: { branch?: unknown; commit?: unknown; create?: boolean },
   git: GitRunner,
 ): Promise<Moved> {
-  const status = await git(['status', '--porcelain'], { cwd })
+  const status = await git(['status', '--porcelain', '-z'], { cwd })
   const dirty = status.ok ? parseStatus(status.out) : []
   if (dirty.length) {
     return {
@@ -768,7 +824,7 @@ export async function restore(
   if (!file.ok) return { ok: false, said: file.why, wouldLose: [] }
 
   if (!overwrite) {
-    const status = await git(['status', '--porcelain', '--', file.value], { cwd })
+    const status = await git(['status', '--porcelain', '-z', '--', file.value], { cwd })
     const dirty = status.ok ? parseStatus(status.out) : []
     if (dirty.length) {
       return {
@@ -803,6 +859,161 @@ export async function stash(cwd: string, git: GitRunner): Promise<Moved> {
   return {
     ok: true,
     said: 'Set aside. It is on the stash, not deleted — `git stash pop` in this repository brings it back exactly as it was.',
+    wouldLose: [],
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * The Uncommitted tab: some of what is not committed, by name
+ * ------------------------------------------------------------------ */
+
+/** How many paths one press may name. A bound on a request body, not an opinion about commits. */
+export const MAX_PATHS = 500
+
+/**
+ * The pathspecs for a list of paths a request named, or the first refusal.
+ *
+ * Every path goes through `repoPath` — the spelling check — and then gets the
+ * `:(literal,top)` magic that `enclosing.ts` uses for the same reason: literal
+ * so a `*` or a `[` in a file name is a character rather than a glob, top so it
+ * is read from the repository root whatever directory git was started in. The
+ * paths came out of `git status`, which prints them from the root, so `top` is
+ * what makes them mean what they meant.
+ */
+function specsFor(raw: unknown): { ok: true; specs: string[]; paths: string[] } | { ok: false; why: string } {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return { ok: false, why: 'Name at least one file. Nothing was committed and nothing was discarded.' }
+  }
+  if (raw.length > MAX_PATHS) {
+    return { ok: false, why: `One press names at most ${MAX_PATHS} files; that one named ${raw.length}.` }
+  }
+  const paths: string[] = []
+  for (const one of raw) {
+    const checked = repoPath(one)
+    if (!checked.ok) return { ok: false, why: checked.why }
+    /* A folder row — `?? checklist/` — arrives with its trailing slash, and a
+       pathspec ending in a slash matches nothing under literal magic. Without
+       the slash it names the directory, which matches everything in it. */
+    paths.push(checked.value.replace(/\/+$/, ''))
+  }
+  return { ok: true, specs: paths.map((path) => `:(literal,top)${path}`), paths }
+}
+
+/**
+ * Commit the named files and nothing else, under a message somebody typed.
+ *
+ * ## What git is asked, and why so little
+ *
+ * `git commit --only -- <paths>` builds the commit from HEAD plus the working
+ * tree state of exactly those paths. Whatever is staged for other paths stays
+ * staged and is not consulted, which is the one property a "commit these
+ * three" button has to have: ticking two files must not quietly carry a third
+ * somebody staged an hour ago. That covers a modified file, a deleted one, a
+ * staged rename — both halves of which arrive here, because the page sends
+ * `from` alongside `path` — and a file added earlier. What it does not cover
+ * is a file git has never seen: pathspec-mode commit refuses an untracked
+ * path, so those, and only those, are `git add`ed first. Which ones they are
+ * is read off `git status` for the same paths rather than trusted from the
+ * request, because the request is a list of names and the working tree is
+ * what is true.
+ *
+ * No `add -A` on the repository, ever. The whole point of this press is that
+ * it carries what was ticked.
+ *
+ * ## The person's own repository is treated as theirs
+ *
+ * `own` is true when this is the repository around the project rather than
+ * the `.kehikot` one this module made, and it changes two things, both taken
+ * from `commitInto` in `enclosing.ts` where they were worked out first: the
+ * repository's own hooks run, because a pre-commit hook somebody installed is
+ * a hook they want on a commit they pressed for; and a missing identity is a
+ * refusal rather than a `kehikot@localhost` fallback, because a commit in
+ * somebody's own history attributed to a made-up address is worse than no
+ * commit. The `.kehikot` repository gets the fallback, as every other commit
+ * into it does.
+ */
+export async function commitPaths(
+  cwd: string,
+  raw: unknown,
+  text: unknown,
+  git: GitRunner,
+  own: boolean,
+): Promise<Committed> {
+  const no = (why: string): Committed => ({ ok: false, subject: '', sha: null, why })
+  const checked = checkMessage(text)
+  if (!checked.ok) return no(checked.why)
+  const named = specsFor(raw)
+  if (!named.ok) return no(named.why)
+
+  let prefix: string[] = []
+  if (own) {
+    const refused = await refusal(cwd, git)
+    if (refused) return no(refused)
+    prefix = hooked
+  } else if (await needsIdentity(cwd, git)) {
+    prefix = ['-c', 'user.name=kehikot', '-c', 'user.email=kehikot@localhost']
+  }
+
+  const status = await git(['status', '--porcelain', '-z', '--', ...named.specs], { cwd })
+  if (!status.ok) return no((status.err || status.out).trim() || 'git could not read the status of those files.')
+  const untracked = parseStatus(status.out)
+    .filter((entry) => entry.kind === 'untracked')
+    .map((entry) => `:(literal,top)${entry.path.replace(/\/+$/, '')}`)
+  if (untracked.length) {
+    const added = await git([...prefix, 'add', '--', ...untracked], { cwd })
+    if (!added.ok) return no((added.err || added.out).trim() || 'git would not add those files.')
+  }
+
+  const made = await git(
+    [...prefix, 'commit', '--only', '--cleanup=whitespace', '-m', checked.value, '--', ...named.specs],
+    { cwd },
+  )
+  if (!made.ok) return no((made.err || made.out).trim() || 'git refused the commit and said nothing.')
+  const sha = await git(['rev-parse', 'HEAD'], { cwd })
+  return { ok: true, subject: checked.value.split('\n')[0] ?? '', sha: sha.ok ? sha.out.trim() : null, why: null }
+}
+
+/**
+ * Take the named uncommitted changes out of the working tree.
+ *
+ * ## It is a stash, and the page says so
+ *
+ * The obvious spelling — `git restore` for the tracked files and `git clean`
+ * for the new ones — throws the work away with no copy anywhere, and `clean` is
+ * refused by the runner's allowlist for exactly that reason: a file git has
+ * never seen is the one thing no history can bring back. This module does not
+ * make an exception for a button.
+ *
+ * `git stash push --include-untracked -- <paths>` leaves the working tree in
+ * precisely the state a discard would — the tracked files as HEAD has them, the
+ * new ones gone — and puts what was there on the stash. To the person it is a
+ * discard: the files are back, the list is shorter. What they also have, and
+ * are told they have, is a `git stash pop` that undoes it. A discard that can
+ * be undone is not a weaker discard.
+ *
+ * "No local changes to save" is git's way of saying the paths named had nothing
+ * uncommitted in them — a list that went stale between the read and the press
+ * — and it is exit 0, so it is matched on its words and reported as nothing
+ * having happened rather than as success.
+ */
+export async function discard(cwd: string, raw: unknown, git: GitRunner): Promise<Moved> {
+  const named = specsFor(raw)
+  if (!named.ok) return { ok: false, said: named.why, wouldLose: [] }
+  const done = await git(
+    ['stash', 'push', '--include-untracked', '-m', 'discarded from the History pane', '--', ...named.specs],
+    { cwd },
+  )
+  if (!done.ok) return { ok: false, said: (done.err || done.out).trim() || 'git refused to discard those.', wouldLose: [] }
+  if (/No local changes/i.test(done.out)) {
+    return { ok: true, said: 'Nothing in those files was uncommitted any more, so nothing was discarded.', wouldLose: [] }
+  }
+  const count = named.paths.length
+  return {
+    ok: true,
+    said:
+      `Discarded ${count === 1 ? 'the change to 1 file' : `the changes to ${count} files`}. The working tree is as `
+      + 'the last commit has it; what was there is on the stash rather than nowhere, and `git stash pop` in this '
+      + 'repository brings it back.',
     wouldLose: [],
   }
 }

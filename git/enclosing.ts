@@ -286,10 +286,17 @@ export interface Landed {
  * appended rather than the prefix being made conditional, which keeps the prefix
  * one unconditional thing.
  */
-const hooked = ['-c', 'core.hooksPath=.git/hooks']
+export const hooked = ['-c', 'core.hooksPath=.git/hooks']
 
-/** Every reason this repository is not one to commit into right now, or null. */
-async function refusal(root: string, git: GitRunner): Promise<string | null> {
+/**
+ * Every reason this repository is not one to commit into right now, or null.
+ *
+ * Exported because `commitPaths` in `repo.ts` — the Uncommitted tab's commit,
+ * made into whichever repository is in front — runs the same three checks
+ * before writing into somebody's own repository, and a second copy of "is HEAD
+ * detached, is a merge half-done, is there an identity" is a copy that drifts.
+ */
+export async function refusal(root: string, git: GitRunner): Promise<string | null> {
   /* `symbolic-ref` rather than `rev-parse --abbrev-ref`, because it also answers
      correctly in a repository with no commits yet — where HEAD points at a
      branch that does not exist. That is an ordinary state and not a refusal: the

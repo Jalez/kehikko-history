@@ -11,25 +11,37 @@ import { Nowhere } from '@/view/nowhere.tsx'
 /**
  * The page.
  *
- * ## Two histories, one at a time
+ * ## One repository, or two — and the pane says which by what it draws
  *
- * The user asked for full control of both — the project's own repository and the
- * `.kehikot` data folder — and asked for them SEPARATELY. So they are two tabs
- * rather than two columns, and the reason is the pane rather than taste: at 220
- * pixels a two-column arrangement gives each history 100 pixels, which is not
- * enough for an object name and a subject line, and a person who cannot read
- * either column has not been given both.
+ * A project has a repository of its own, and its `.kehikot` folder MAY have one
+ * too. Whether it does is a question `git/enclosing.ts` answers in five words,
+ * and the page used to draw two tabs whatever the answer was: "Project" and
+ * "Data". On a project whose own repository keeps `.kehikot` — the honest and
+ * common case, once somebody has switched the host's "keep .kehikot in git"
+ * setting — the Data tab was a pane with nothing in it but a paragraph
+ * explaining that there was nothing in it.
  *
- * The tabs also make the separateness legible, which is the thing most likely to
- * be misunderstood here. These are not two views of one history. A commit in one
- * is invisible in the other, and somebody who thought otherwise would believe
- * their notes were backed up by their project's last push. The word on the tab
- * and the path under it both say which repository is in front.
+ * So the split is drawn only when it is real:
+ *
+ * - **`at: 'elsewhere'`** — the repository around the project tracks the
+ *   folder (`kept`) or is about to (`offered`; git already lists it as
+ *   untracked there). One repository. The page shows that one, and every
+ *   `.kehikot/…` change appears in its Uncommitted tab beside everything else,
+ *   which is where a person committing their thesis expects to find it.
+ * - **Anything else** — `.kehikot` is a repository of its own (`repository`),
+ *   could become one (`waiting`), or something is wrong with it (`refused`).
+ *   Two histories, or one and the offer of a second. A chooser above the
+ *   branch row says which the tabs are about, and it is drawn to look unlike
+ *   the tabs, because it answers a different question.
+ *
+ * Nothing about the second repository's machinery went anywhere. It was drawn
+ * in the wrong place, in the wrong situation, with too many words.
  *
  * ## Which one is in front is remembered
  *
- * One word, kept by the host, unkeyed by canvas — see `use-roadmap.ts`. Somebody
- * who works in the data history wants the data history when they come back.
+ * One word, kept by the host, unkeyed by canvas — see `use-roadmap.ts`. A
+ * remembered `kehikot` on a project that turns out to have one repository is
+ * simply overridden: there is no second repository to remember.
  *
  * ## Switching project repaints, without a reload
  *
@@ -72,24 +84,24 @@ export function App() {
   const [standing, setStanding] = useState<Standing | null>(null)
 
   const onGoto = useCallback<GotoHandler>((message, answer) => {
-    /* A `goto` may name an epic, a step, or a reference. This pane shows two git
+    /* A `goto` may name an epic, a step, or a reference. This pane shows git
        repositories, so the honest answer to all three is that there is nothing
        here to be walked to — saying so quickly is what gets the reader the
        host's fallback link instead of a twelve-second wait. */
     answer(
       false,
       message.ref
-        ? 'This pane shows two git histories, so there is nothing here to walk to by reference.'
-        : 'This pane shows two git histories, so there is nothing here to walk to by epic or step.',
+        ? 'This pane shows a git history, so there is nothing here to walk to by reference.'
+        : 'This pane shows a git history, so there is nothing here to walk to by epic or step.',
     )
   }, [])
 
   const { where, projectPath, project, kept, remember, resize } = useRoadmap(ID, onGoto)
 
-  /* The remembered tab wins whenever there is one, and only ever on arrival —
-     after that this page's own state is the answer. Two answers to "which
-     history am I looking at" with no way to tell them apart is exactly the fault
-     this workspace argues against everywhere else. */
+  /* The remembered repository wins whenever there is one, and only ever on
+     arrival — after that this page's own state is the answer. Two answers to
+     "which history am I looking at" with no way to tell them apart is exactly
+     the fault this workspace argues against everywhere else. */
   const applied = useRef(false)
   useEffect(() => {
     if (applied.current || kept === null) return
@@ -204,7 +216,10 @@ export function App() {
     return () => watch.disconnect()
   })
 
-  const reading = both ? (which === 'project' ? both.project : both.kehikot) : null
+  /* One repository or two. See the essay at the top. */
+  const one = both?.at === 'elsewhere'
+  const facing: Which = one ? 'project' : which
+  const reading = both ? (facing === 'project' ? both.project : both.kehikot) : null
 
   /*
    * `nowhere` is drawn only once the greeting has settled.
@@ -225,9 +240,9 @@ export function App() {
     ) : reading ? (
       <History
         reading={reading}
-        standing={which === 'kehikot' ? standing : null}
-        at={which === 'kehikot' ? (both?.at ?? 'waiting') : 'repository'}
-        stanceSaid={which === 'kehikot' ? (both?.said ?? null) : null}
+        standing={facing === 'kehikot' ? standing : null}
+        at={facing === 'kehikot' ? (both?.at ?? 'waiting') : 'repository'}
+        stanceSaid={facing === 'kehikot' ? (both?.said ?? null) : null}
         kehikot={both?.path ?? null}
         busy={busy}
         onStart={() => void act(async (path) => {
@@ -252,13 +267,13 @@ export function App() {
               }
             : { ok: false, error: started.why ?? 'It could not be started, and said nothing about why.' }
         })}
-        onCommit={(message) => void act((path) => ask.commit(path, message.trim() || null))}
-        onMove={(target) => void act((path) => ask.move(path, which, target))}
-        onRestore={(commitName, file, overwrite) => void act((path) => ask.restore(path, which, commitName, file, overwrite))}
-        onStash={() => void act((path) => ask.stash(path, which))}
+        onCommitPaths={(entries, message) => void act((path) => ask.commitPaths(path, facing, entries, message))}
+        onDiscard={(entries) => void act((path) => ask.discard(path, facing, entries))}
+        onMove={(target) => void act((path) => ask.move(path, facing, target))}
+        onRestore={(commitName, file, overwrite) => void act((path) => ask.restore(path, facing, commitName, file, overwrite))}
         onShow={(sha) =>
           void act(async (path) => {
-            const answer = await ask.show(path, which, sha)
+            const answer = await ask.show(path, facing, sha)
             if (answer.ok) setShown({ sha, text: answer.said })
             return answer.ok ? { ok: true, said: '' } : answer
           })
@@ -267,7 +282,7 @@ export function App() {
       />
     ) : (
       <p className="text-[0.7rem] leading-4 text-muted-foreground">
-        {where === 'listening' ? 'Waiting to hear which project is open.' : 'Reading both histories.'}
+        {where === 'listening' ? 'Waiting to hear which project is open.' : 'Reading the history.'}
       </p>
     )
 
@@ -277,16 +292,16 @@ export function App() {
         <header>
           <h1 className="text-sm font-semibold">History</h1>
           <p className="text-[0.7rem] leading-4 text-muted-foreground">
-            Both of a project’s histories. Its own git repository holds the work. The .kehikot folder where the
-            Checklist, Notes, Learning and Journeys modules keep their data can have one of its own — when the project
-            ignores that folder, or has no repository at all — made only when you press for it and then committed to a
-            few seconds after anything in it changes, with a message saying what changed. Where the project’s own
-            repository already keeps that folder, this module leaves the history where you put it.
+            A project’s git history, as two tabs: what is committed, and what is not yet. The .kehikot folder where
+            the Checklist, Notes, Learning and Journeys modules keep their data is part of that history when the
+            project’s own repository keeps it, and can have a repository of its own — made only when you press for it
+            — when the project ignores it or has no repository at all. Where there are two, a chooser above the
+            branch says which one the tabs are about.
           </p>
         </header>
       )}
 
-      {both && !both.nowhere ? <Pick which={which} onPick={pick} /> : null}
+      {both && !both.nowhere && !one ? <Pick which={which} onPick={pick} /> : null}
 
       {reading ? (
         <p className="min-w-0 text-[0.6rem] leading-4 text-muted-foreground [overflow-wrap:anywhere]">{reading.root}</p>
