@@ -1,18 +1,39 @@
+import { FileDown, GitCommitHorizontal, ScrollText } from 'lucide-react'
 import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge.tsx'
 import { Button } from '@/components/ui/button.tsx'
 import { Input } from '@/components/ui/input.tsx'
+import { Explained, Explaining } from '@/components/ui/tooltip.tsx'
 import { Arm } from '@/view/arm.tsx'
+import { frozenReason } from '@/view/frozen.ts'
 import type { Reading } from '@/store/ask.ts'
 
 /**
  * The Commits tab: what is committed, newest first.
  *
  * This is the list the pane has always drawn, moved into a tab of its own when
- * the other tab arrived. Nothing about a row changed: the object name, the
- * time and author, the subject that wraps, and the three presses — open it,
- * go there, bring a file back from it.
+ * the other tab arrived. A row is the object name, the time and author, the
+ * subject that wraps, and three presses — open it, go there, bring a file back
+ * from it.
+ *
+ * ## The three presses are icons, and the words are in tooltips
+ *
+ * "Open", "Go here" and "Restore a file" were three text buttons that wrapped
+ * onto two rows in a narrow pane and were repeated once per commit — forty
+ * words of chrome down a column forty commits long, saying the same three
+ * things every time. As icons they are one row at every width, and the words
+ * are still there for anybody who wants them: a tooltip on hover or focus, and
+ * an `aria-label` that is the same string, so nothing is lost to a screen
+ * reader or to a test that looks the control up by name.
+ *
+ * ## Going to a commit is frozen for the same reason as switching branch
+ *
+ * It is the same command. `Go here` used to stay pressable over a dirty tree
+ * and arm into a warning that git was about to refuse it — two presses spent
+ * learning what the branch select said by being grey. It is now disabled by
+ * the same `frozenReason` the select uses, so the two halves of "you cannot
+ * move HEAD right now" cannot drift apart.
  *
  * ## The subject wraps, and everything here is sized to the pane
  *
@@ -43,6 +64,7 @@ export function Commits({
   const [restoring, setRestoring] = useState<string | null>(null)
   const [file, setFile] = useState('')
   const data = reading.which === 'kehikot'
+  const frozen = reading.dirty.length > 0
 
   if (reading.commits.length === 0) {
     return (
@@ -66,30 +88,53 @@ export function Commits({
           {/* The subject, and the one string on this screen most likely to be
               long. It wraps. It has always wrapped. See the badge essay. */}
           <p className="min-w-0 text-[0.7rem] leading-4 [overflow-wrap:anywhere]">{one.subject}</p>
-          <div className="flex min-w-0 flex-wrap gap-1">
-            <Button type="button" size="pane" variant="ghost" disabled={busy} onClick={() => onShow(one.sha)}>
-              Open
-            </Button>
-            <Arm
-              label="Go here"
-              armed={`Check out ${one.short}`}
-              warning={
-                reading.dirty.length
-                  ? `There are ${reading.dirty.length} uncommitted changes here, so git will refuse this rather than do it. Commit them or discard them first.`
-                  : 'This leaves you looking at one commit rather than at a branch — a detached HEAD. Nothing is lost; the pane will say how to get back.'
-              }
-              disabled={busy}
-              onFire={() => onMove({ commit: one.sha })}
-            />
-            <Button
-              type="button"
-              size="pane"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => setRestoring(restoring === one.sha ? null : one.sha)}
-            >
-              Restore a file
-            </Button>
+          <div className="flex min-w-0 flex-wrap items-start gap-1">
+            <Explained reason={`Open ${one.short} — the full commit, as git shows it`}>
+              <Button
+                type="button"
+                size="paneIcon"
+                variant="ghost"
+                aria-label="Open"
+                disabled={busy}
+                onClick={() => onShow(one.sha)}
+              >
+                <ScrollText className="size-3.5" />
+              </Button>
+            </Explained>
+
+            {frozen ? (
+              /* Grey, and the reason is the branch select's reason, because it
+                 is the same refusal from the same command. */
+              <Explaining id={`gohere-${one.sha}`} reason={frozenReason(reading.dirty.length)}>
+                <Button type="button" size="paneIcon" variant="ghost" aria-label="Go here" disabled>
+                  <GitCommitHorizontal className="size-3.5" />
+                </Button>
+              </Explaining>
+            ) : (
+              <Arm
+                label="Go here"
+                icon={<GitCommitHorizontal className="size-3.5" />}
+                reason={`Go here — check out ${one.short}, leaving you on a commit rather than a branch`}
+                armed={`Check out ${one.short}`}
+                warning="This leaves you looking at one commit rather than at a branch — a detached HEAD. Nothing is lost; the pane will say how to get back."
+                disabled={busy}
+                onFire={() => onMove({ commit: one.sha })}
+              />
+            )}
+
+            <Explained reason={`Restore a file — bring one file back as it was at ${one.short}`}>
+              <Button
+                type="button"
+                size="paneIcon"
+                variant="ghost"
+                aria-label="Restore a file"
+                aria-expanded={restoring === one.sha}
+                disabled={busy}
+                onClick={() => setRestoring(restoring === one.sha ? null : one.sha)}
+              >
+                <FileDown className="size-3.5" />
+              </Button>
+            </Explained>
           </div>
           {shown?.sha === one.sha ? (
             <pre className="min-w-0 overflow-x-auto rounded border bg-muted/40 p-1.5 text-[0.6rem] leading-4">{shown.text}</pre>

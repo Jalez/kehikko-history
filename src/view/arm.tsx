@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button.tsx'
+import { Explained } from '@/components/ui/tooltip.tsx'
 import { cn } from '@/lib/utils.ts'
 
 /**
@@ -37,17 +38,33 @@ import { cn } from '@/lib/utils.ts'
  * This component does not compose it, because a generic "are you sure?" is
  * exactly the prompt people learn to press through. What is passed in names the
  * actual thing: which files, by name, that would be lost. See `Histories`.
+ *
+ * ## `icon` shrinks the resting state, never the armed one
+ *
+ * With an `icon`, the button at rest is the icon alone with `label` as its
+ * accessible name — a row of commits should not repeat three words per row.
+ * Once ARMED it goes back to words, and that is deliberate rather than
+ * inconsistent: the armed state is the one a person must read before pressing
+ * again, and an icon that has quietly become dangerous is exactly the trap the
+ * two-press pattern exists to avoid. The border still turns red, and the
+ * sentence still appears under it.
  */
 export function Arm({
   label,
+  icon,
+  reason,
   armed: armedLabel,
   warning,
   onFire,
   disabled,
   className,
 }: {
-  /** What the button says at rest. */
+  /** What the button says at rest — and, with `icon`, its accessible name instead. */
   label: string
+  /** Drawn instead of `label` at rest. The armed state is always words. */
+  icon?: ReactNode
+  /** What a tooltip says about the resting press. Only meaningful with `icon`. */
+  reason?: string
   /** What it says once armed. Should be a verb about the specific act. */
   armed: string
   /** What would happen, in specifics. Shown only while armed. */
@@ -77,27 +94,32 @@ export function Arm({
     return () => document.removeEventListener('pointerdown', elsewhere, { capture: true })
   }, [armed, disarm])
 
+  const button = (
+    <Button
+      type="button"
+      size={icon && !armed ? 'paneIcon' : 'pane'}
+      variant="outline"
+      aria-label={icon && !armed ? label : undefined}
+      disabled={disabled}
+      className={cn(armed && 'border-failed/60 text-failed', className)}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={() => {
+        if (!armed) {
+          setArmed(true)
+          timer.current = setTimeout(() => setArmed(false), 8000)
+          return
+        }
+        disarm()
+        onFire()
+      }}
+    >
+      {armed ? armedLabel : (icon ?? label)}
+    </Button>
+  )
+
   return (
     <span className="inline-flex min-w-0 flex-col gap-1">
-      <Button
-        type="button"
-        size="pane"
-        variant="outline"
-        disabled={disabled}
-        className={cn(armed && 'border-failed/60 text-failed', className)}
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => {
-          if (!armed) {
-            setArmed(true)
-            timer.current = setTimeout(() => setArmed(false), 8000)
-            return
-          }
-          disarm()
-          onFire()
-        }}
-      >
-        {armed ? armedLabel : label}
-      </Button>
+      {icon && !armed && reason ? <Explained reason={reason}>{button}</Explained> : button}
       {armed ? (
         <span
           role="alert"

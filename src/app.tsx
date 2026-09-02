@@ -303,7 +303,20 @@ export function App() {
 
       {both && !both.nowhere && !one ? <Pick which={which} onPick={pick} /> : null}
 
-      {reading ? (
+      {/*
+        Where the repository is, and ONLY when that is a question.
+
+        It used to be printed on every load. On a project with one repository
+        it is the project folder — the folder the host is already showing, that
+        the person opened, whose name is in the pane header — restated as an
+        absolute path across three wrapped lines of a 220-pixel column. It said
+        nothing that was not already on the screen.
+
+        Where there are two repositories it is a different line entirely: the
+        chooser above says "Project" or ".kehikot" and this says which folder
+        that is on disk. So it is drawn exactly when the chooser is.
+      */}
+      {reading && both && !both.nowhere && !one ? (
         <p className="min-w-0 text-[0.6rem] leading-4 text-muted-foreground [overflow-wrap:anywhere]">{reading.root}</p>
       ) : null}
 
