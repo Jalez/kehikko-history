@@ -170,10 +170,25 @@ export function Commits({
                 room left beside them. The badge is INSIDE this box, in the text
                 flow, rather than a flex item of its own — see the essay for the
                 measurement that decided it. The text wraps, because an author's
-                name is not bounded by anything. */}
+                name is not bounded by anything.
+
+                `min-w-min`, NOT `min-w-0`, and the difference is the badge
+                drawn under the presses. With a zero minimum the box can be
+                squeezed narrower than the one thing in it that cannot wrap —
+                the 58-pixel object name — and inline content that does not
+                fit its box is not clipped, it is drawn on past the edge, under
+                whatever comes next: measured at 140 pixels, the meta was 44
+                wide, the badge ran to 66 and the presses began at 56.
+                `document.scrollWidth` was 140 throughout, because two boxes on
+                top of each other take no more room than one. With the minimum
+                at min-content the box is never narrower than the badge, the
+                flex-wrap row sees the badge and the presses will not share a
+                line, and the presses drop to the next one instead. Every word
+                in the box still breaks anywhere, so min-content IS the badge
+                and nothing else on the line changes at 160 and up. */}
             <span
               data-meta
-              className="min-w-0 flex-1 basis-0 text-[0.6rem] leading-4 text-muted-foreground [overflow-wrap:anywhere]"
+              className="min-w-min flex-1 basis-0 text-[0.6rem] leading-4 text-muted-foreground [overflow-wrap:anywhere]"
             >
               <Badge variant="tag" className="mr-0.5">
                 {one.short}
@@ -236,7 +251,12 @@ export function Commits({
                 <Arm
                   label="Go here"
                   icon={<GitCommitHorizontal className="size-3.5" />}
-                  reason={`Go here — check out ${one.short}, leaving you on a commit rather than a branch`}
+                  /* The act, not the consequence: the consequence is the armed
+                     warning, one press later, where it has to be read. As a
+                     four-line tooltip at 160 pixels the longer sentence had
+                     no room above the first row and Radix put it under —
+                     over the subject, which is the thing it must not cover. */
+                  reason={`Go here — check out ${one.short}`}
                   armed={`Check out ${one.short}`}
                   warning="This leaves you looking at one commit rather than at a branch — a detached HEAD. Nothing is lost; the pane will say how to get back."
                   disabled={busy}
@@ -262,8 +282,27 @@ export function Commits({
           </div>
           {/* Line two: the subject, and the one string on this screen most
               likely to be long. It wraps. It has always wrapped. See the badge
-              essay. */}
-          <p className="min-w-0 text-[0.7rem] leading-4 [overflow-wrap:anywhere]">{one.subject}</p>
+              essay.
+
+              Under 320 pixels it wraps to TWO lines and stops. A row whose
+              subject runs to five lines at 220 is not a row any more, and
+              somebody asked whether the subject belonged there at all when the
+              pane is that small. It does — it is the only part of a row that
+              says what the commit DID, and a column of object names and
+              initials is a column nobody can read — so it is clamped rather
+              than dropped, with the whole of it in `title` for a hover and in
+              the DOM for a reader, and the Open press one icon away for the
+              commit in full. `line-clamp` is `overflow: hidden` on a box that
+              is already sized to the pane, so it cannot widen anything; it
+              only takes height. A row at 220 is now at most 24 + 32 pixels
+              plus the gap between, against 24 + 80 for a 100-character
+              subject before. */}
+          <p
+            title={one.subject}
+            className="min-w-0 text-[0.7rem] leading-4 [overflow-wrap:anywhere] @max-xs/pane:line-clamp-2"
+          >
+            {one.subject}
+          </p>
           {shown?.sha === one.sha ? (
             <pre className="min-w-0 overflow-x-auto rounded border bg-muted/40 p-1.5 text-[0.6rem] leading-4">{shown.text}</pre>
           ) : null}

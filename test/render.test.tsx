@@ -529,7 +529,12 @@ describe('nothing on this screen can push the pane sideways', () => {
     expect(meta.querySelector('[data-slot="badge"]')?.textContent).toBe('fffffff')
     expect(meta.className).not.toContain('whitespace-nowrap')
     expect(meta.className).toContain('overflow-wrap:anywhere')
-    expect(meta.className).toContain('min-w-0')
+    /* `min-w-min`, and NOT `min-w-0`: a zero minimum let the box be squeezed
+       narrower than the badge, and the badge was drawn on under the presses
+       — measured at 140 pixels, badge 8–66 and presses from 56, with the
+       document exactly 140 wide throughout. See the comment on the box. */
+    expect(meta.className).toContain('min-w-min')
+    expect(meta.className).not.toMatch(/\bmin-w-0\b/)
     expect(meta.className).toContain('basis-0')
 
     const presses = line.querySelector('[data-presses]') as HTMLElement
@@ -694,6 +699,39 @@ describe('under 320 pixels the pane says the same things in fewer letters', () =
     const words = badge.querySelector('span') as HTMLElement
     expect(words.textContent).toBe('detached at ')
     expect(words.className).toContain('@max-xs/pane:sr-only')
+  })
+
+  test('the subject is clamped to two lines under 320, with the whole of it a hover away', () => {
+    /* Somebody asked whether the subject belonged in a tiny pane at all. It
+       does — it is the only part of a row that says what the commit did —
+       so it is clamped rather than dropped: two lines below 320 pixels, and
+       `title` carries all of it. The text stays in the DOM in full, which is
+       what a screen reader gets and what this reads. */
+    const long = 'notes: 3 added on a/very/long/path.tex, checklist: ticked “something quite long indeed” for gh#105'
+    paint({ commits: [{ sha: 'e'.repeat(40), short: 'eeeeeee', at: '2020-08-31T09:00:00Z', who: 'Jaakko', subject: long }] })
+    const subject = screen.getByText(long)
+    expect(subject.className).toContain('@max-xs/pane:line-clamp-2')
+    expect(subject.className).not.toMatch(/(^|\s)line-clamp-/)
+    expect(subject.getAttribute('title')).toBe(long)
+    expect(subject.textContent).toBe(long)
+  })
+
+  test('the presses’ tooltips open above the row, not over the subject under it', () => {
+    /* Measured before this held: at 220, 320 and 400 a tooltip under any of
+       the three presses covered the whole subject — the one sentence a
+       person reads before pressing. The side is asserted on the trigger's
+       content because Radix draws the tooltip only on hover, which this
+       harness cannot do; the browser measurement is in dev/small.drive.mjs. */
+    paint()
+    fireEvent.pointerMove(screen.getByRole('button', { name: 'Open' }))
+    fireEvent.focus(screen.getByRole('button', { name: 'Open' }))
+    const content = document.querySelector('[data-slot="tooltip-content"]')
+    if (content) expect(content.getAttribute('data-side')).toBe('top')
+    /* Whether or not the harness opened it, the default is what the row
+       relies on: read from the module rather than remembered. */
+    const source = require('node:fs').readFileSync(`${import.meta.dirname}/../src/components/ui/tooltip.tsx`, 'utf8') as string
+    expect(source).not.toMatch(/side = 'bottom'/)
+    expect(source.match(/side = 'top'/g)?.length).toBe(2)
   })
 
   test('an armed label wraps: "Overwrite <a long path>" is not a nowrap button', () => {

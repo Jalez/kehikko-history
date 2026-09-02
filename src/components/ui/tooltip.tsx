@@ -38,6 +38,30 @@ import { cn } from '@/lib/utils.ts'
  * So the two helpers below bring their own. Nested providers are allowed and
  * the cost is a context per tooltip in a pane with a handful of them.
  *
+ * ## It opens ABOVE the control, because below is what the control is about
+ *
+ * shadcn's default side is `bottom`, and on this page bottom is the commit
+ * subject. The three presses sit at the right end of a commit row's first
+ * line, and the subject is the line under it — the one sentence a person
+ * reads to decide whether to press. Measured at 220, 320 and 400: a tooltip
+ * under any of the three covered the whole of that subject, 46 pixels tall
+ * over a subject 16 to 64 tall, at every width. A tooltip is meant to float
+ * over something; what it must not float over is the thing the pointer is
+ * deciding about.
+ *
+ * Above the control is the previous row's subject, or the tab strip for the
+ * first row — content already read, on the way down. So `top` is the default
+ * for every tooltip here, and the row presses rely on it. Radix still flips
+ * it to the bottom when there is no room above, which happens for a row
+ * whose first line is at the very top of a scrolled frame; that is the one
+ * case this cannot help and the collision handling is right to take.
+ *
+ * Replacing these tooltips with the native `title` on the narrow rung was
+ * weighed and not done. A `title` cannot be conditional on the container, so
+ * it would have meant both a tooltip and a title on one control — two
+ * sentences opening at different delays — or a page-measuring script for
+ * what one CSS side achieves.
+ *
  * ## The reason is also in the DOM when nothing is hovering
  *
  * A tooltip that exists only while hovered is a sentence that a screen reader
@@ -70,12 +94,17 @@ function TooltipContent({
       <TooltipPrimitive.Content
         data-slot="tooltip-content"
         sideOffset={sideOffset}
-        /* `max-w` in pixels rather than a fraction of anything: this content is
-           portalled to the document body, so it is not inside the container it
-           is explaining and container units would measure the wrong box. 15rem
-           is narrower than the narrowest pane this ships into. */
+        /* `max-w` in rem and in `vw`, never a container unit: this content is
+           portalled to the document body, so it is not inside the element it
+           is explaining. `vw` is honest here because the page IS the pane —
+           the host frames it, and the viewport is the frame. 15rem was said
+           to be "narrower than the narrowest pane this ships into" and was
+           not: at 220 pixels the tooltip measured 240 wide, from x=0 to
+           x=240 on a frame 220 across. So it is capped at the frame less a
+           margin as well, whichever is smaller. */
+        collisionPadding={4}
         className={cn(
-          'z-50 max-w-[15rem] rounded-md border bg-popover px-2 py-1.5 text-[0.65rem] leading-4 text-popover-foreground shadow-md [overflow-wrap:anywhere]',
+          'z-50 max-w-[min(15rem,calc(100vw-0.5rem))] rounded-md border bg-popover px-2 py-1.5 text-[0.65rem] leading-4 text-popover-foreground shadow-md [overflow-wrap:anywhere]',
           className,
         )}
         {...props}
@@ -100,7 +129,7 @@ function TooltipContent({
 function Explained({
   reason,
   children,
-  side = 'bottom',
+  side = 'top',
 }: {
   reason: string
   children: React.ReactNode
@@ -127,7 +156,7 @@ function Explaining({
   reason,
   children,
   className,
-  side = 'bottom',
+  side = 'top',
 }: {
   id: string
   reason: string
