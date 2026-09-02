@@ -119,6 +119,34 @@ const REFUSED_FLAGS = new Set(['--amend', '--hard', '--force', '-f', '--force-wi
  */
 const SOFT_F: Record<string, true> = { stash: true }
 
+/**
+ * The only `git -c key=value` settings this module will pass, and why there is a
+ * list rather than a rule.
+ *
+ * `-c` takes its value as the NEXT argument, which is a fact about git's command
+ * line that a check reading arguments one at a time cannot see. Before this list
+ * existed, `vetted` found the first argument not beginning with a dash and
+ * called it the subcommand — so `git -c user.name=kehikot commit …` was read as
+ * `git user.name=kehikot`, refused as an unknown subcommand, and the identity
+ * fallback in `repo.ts` had been dead the whole time without anything saying so.
+ * That is the shape of bug this file exists to prevent, arriving through the
+ * file itself.
+ *
+ * So the pair is understood: `-c` consumes its value, the value is checked
+ * against this list, and the search for the subcommand skips both. The list is
+ * short because `git -c` can set ANYTHING — `core.pager`, `core.sshCommand`,
+ * `alias.*`, `credential.helper` — and "a config key" is not a category this
+ * module has any business accepting from a caller.
+ *
+ * - `user.name` / `user.email`: the identity fallback for a `.kehikot`
+ *   repository on a machine where git has none. Never used for somebody's own
+ *   repository — see `refusal()` in `enclosing.ts`.
+ * - `core.hooksPath`: set EMPTY by `PREFIX` on every call, and pointed back at
+ *   the repository's own hooks by `enclosing.ts` for the one commit a person
+ *   presses for. Both directions go through here.
+ */
+const SETTABLE = [/^user\.name=/, /^user\.email=/, /^core\.hooksPath=/]
+
 export type Vetted = { ok: true } | { ok: false; why: string }
 
 /**
@@ -130,7 +158,30 @@ export type Vetted = { ok: true } | { ok: false; why: string }
  * gets forgotten.
  */
 export function vetted(args: string[]): Vetted {
-  const subcommand = args.find((arg) => !arg.startsWith('-'))
+  /* `-c` and its value, understood as the pair they are. See `SETTABLE`. */
+  let subcommand: string | null = null
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index] ?? ''
+    if (arg === '-c') {
+      const value = args[index + 1]
+      if (value === undefined || !SETTABLE.some((allowed) => allowed.test(value))) {
+        return {
+          ok: false,
+          why:
+            `\`-c ${value ?? ''}\` is not a setting this module passes to git. It passes three — user.name, `
+            + 'user.email and core.hooksPath — because `git -c` can set anything at all, including which program git '
+            + 'runs for a pager, a hook or a credential, and a config key is not a category this module accepts from '
+            + 'a caller.',
+        }
+      }
+      index += 1
+      continue
+    }
+    if (!arg.startsWith('-')) {
+      subcommand = arg
+      break
+    }
+  }
   if (!subcommand) {
     return { ok: false, why: 'That was a call to git with no subcommand in it, which is not something this module runs.' }
   }

@@ -179,4 +179,49 @@ describe('the subcommand allowlist, which is the guard rather than a formality',
   test('the prefix turns hooks off and asks for no pager', () => {
     expect(PREFIX).toEqual(['--no-pager', '-c', 'core.hooksPath='])
   })
+
+  /**
+   * `-c` takes its value as the NEXT argument, and a check that reads arguments
+   * one at a time cannot see that.
+   *
+   * This was a real hole and a real dead feature at the same time. The subcommand
+   * used to be "the first argument not beginning with a dash", so
+   * `git -c user.name=kehikot commit …` was read as `git user.name=kehikot` and
+   * refused — which meant the identity fallback in `repo.ts`, the thing that lets
+   * a `.kehikot` repository be committed to on a machine where git has no
+   * configured name, had never once worked and nothing said so.
+   */
+  describe('`-c key=value` is understood as the pair it is', () => {
+    test('the identity fallback reaches its subcommand instead of being read as one', () => {
+      expect(vetted(['-c', 'user.name=kehikot', '-c', 'user.email=kehikot@localhost', 'commit', '-m', 'x']).ok).toBe(true)
+    })
+
+    test('hooks can be turned off and pointed back at the repository’s own', () => {
+      expect(vetted(['-c', 'core.hooksPath=', 'commit', '-m', 'x']).ok).toBe(true)
+      expect(vetted(['-c', 'core.hooksPath=.git/hooks', 'commit', '-m', 'x']).ok).toBe(true)
+    })
+
+    /* `git -c` can set which program git runs for a pager, a hook, a credential
+       or an ssh command. Three keys are passed and nothing else is. */
+    test('any other setting is refused, whatever it is attached to', () => {
+      expect(vetted(['-c', 'core.pager=sh -c evil', 'log']).ok).toBe(false)
+      expect(vetted(['-c', 'credential.helper=!evil', 'status']).ok).toBe(false)
+      expect(vetted(['-c', 'core.sshCommand=evil', 'log']).ok).toBe(false)
+      expect(vetted(['-c', 'alias.log=!evil', 'log']).ok).toBe(false)
+    })
+
+    /* A leading `-c` with nothing after it. `git log -c` is deliberately NOT
+       this case: there the subcommand has already been found, and `-c` after a
+       subcommand is that subcommand's own flag — `git log -c` asks for a
+       combined diff — which is nothing to do with setting configuration. */
+    test('a -c with nothing after it is refused rather than ignored', () => {
+      expect(vetted(['-c']).ok).toBe(false)
+    })
+
+    /* The value is skipped when looking for the subcommand, so a value that
+       happens to name an allowed subcommand cannot become one. */
+    test('a value is never mistaken for the subcommand', () => {
+      expect(vetted(['-c', 'core.pager=log']).ok).toBe(false)
+    })
+  })
 })

@@ -1,6 +1,7 @@
 import type { Both } from '../../doors.ts'
 import type { Standing } from '../../git/committer.ts'
-import type { Branch, Commit, Dirty, Head, Reading } from '../../git/repo.ts'
+import type { Stance } from '../../git/enclosing.ts'
+import type { At, Branch, Commit, Dirty, Head, Reading } from '../../git/repo.ts'
 import type { Which } from '../../git/names.ts'
 
 /**
@@ -30,7 +31,7 @@ import type { Which } from '../../git/names.ts'
  * page that loads and never answers the host's greeting.
  */
 
-export type { Both, Branch, Commit, Dirty, Head, Reading, Standing, Which }
+export type { At, Both, Branch, Commit, Dirty, Head, Reading, Stance, Standing, Which }
 
 /**
  * The ticket, read once off the inert JSON island the document carries.
@@ -77,11 +78,13 @@ async function post(path: string, body: Record<string, unknown>): Promise<Said> 
 }
 
 /**
- * Both histories, for one project.
+ * Both histories and the folder's situation, for one project.
  *
- * A read, and it creates nothing. Opening a pane against somebody's project must
- * not leave a repository in it they did not ask for — see the note on
- * `watching()` in `git/committer.ts`. `start()` below is what creates.
+ * A read, and it creates nothing — not a directory, not a repository, not a
+ * file. That sentence used to be true of this function and false of the page
+ * calling it, which POSTed a start alongside it on every mount. The situation
+ * now comes back HERE, in `at`, `stance` and `said`, so the page has something
+ * to draw and nothing to do.
  */
 export async function histories(projectPath: string | null): Promise<Both> {
   const query = projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''
@@ -89,22 +92,36 @@ export async function histories(projectPath: string | null): Promise<Both> {
   return (await response.json()) as Both
 }
 
+export interface Started {
+  ok: boolean
+  why: string | null
+  standing: Standing | null
+  created: boolean
+  at: At
+}
+
 /**
- * Make the data folder a repository if it is not one, and start committing to
- * it.
+ * Start committing to the `.kehikot` repository — and, when `asked`, make it one.
  *
- * A POST, because it is an act. It is idempotent — a second call against a
- * project already being watched answers with what is already running — so the
- * page calls it whenever the project changes without having to remember whether
- * it already has.
+ * Two callers and they pass different things, which is the point:
+ *
+ * - The page, on arrival, with `asked: false`. That resumes automatic commits to
+ *   a repository that is already there and does nothing at all otherwise. A page
+ *   load is not consent.
+ * - The "Start a history here" press, with `asked: true`. Somebody has read a
+ *   sentence naming the folder, and pressed anyway.
+ *
+ * This is the whole of the fix on this side. It used to be one call with no
+ * argument, fired from a `useEffect` on mount, and what it did was `git init` in
+ * somebody's project.
  */
-export async function start(projectPath: string): Promise<{ ok: boolean; why: string | null; standing: Standing | null; created: boolean }> {
+export async function start(projectPath: string, asked: boolean): Promise<Started> {
   const response = await fetch('/api/watch', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-history-ticket': TICKET },
-    body: JSON.stringify({ project: projectPath }),
+    body: JSON.stringify({ project: projectPath, asked }),
   })
-  return (await response.json()) as { ok: boolean; why: string | null; standing: Standing | null; created: boolean }
+  return (await response.json()) as Started
 }
 
 /** Commit the data folder now, under a message somebody typed — or the derived one when it is blank. */

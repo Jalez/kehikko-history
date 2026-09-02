@@ -107,25 +107,29 @@ export function App() {
   )
 
   /**
-   * Make the data folder a repository and start committing to it.
+   * Resume committing to a `.kehikot` repository that ALREADY EXISTS — and
+   * nothing else.
    *
-   * A POST, once per project, and deliberately not something the read does on
-   * the side: creating a directory and running `git init` inside somebody's
-   * project is an act, and an act belongs behind a page that has been told which
-   * project it is looking at rather than behind a page load. It is idempotent,
-   * so this fires again on every project change without having to remember
-   * whether it already has.
+   * `asked: false`. This effect runs on every project change, which is exactly
+   * why it must not be able to create anything: a page load is not consent, and
+   * this effect used to be what ran `git init` in two of the user's projects
+   * without anybody asking for it. What it does now is start the watcher for a
+   * folder somebody has already pressed Start on once, which is a decision that
+   * has been made and does not want re-asking every four seconds.
+   *
+   * A refusal is not painted from here either. The read below carries the same
+   * situation in `at` and `said`, and `History` draws it in place, next to the
+   * button that would act on it — rather than as a red box at the top of a pane
+   * about something the reader has not been told the shape of yet.
    */
   useEffect(() => {
     if (!projectPath) return
     let alive = true
     void ask
-      .start(projectPath)
+      .start(projectPath, false)
       .then((started) => {
         if (!alive) return
         setStanding(started.standing)
-        if (started.created) setSaid(`Started a git history for this project’s data folder. It was not one before.`)
-        if (!started.ok && started.why) setTrouble(started.why)
       })
       .catch(() => {
         /* The read below will say what it can see. A failed start is not a
@@ -222,11 +226,30 @@ export function App() {
       <History
         reading={reading}
         standing={which === 'kehikot' ? standing : null}
+        at={which === 'kehikot' ? (both?.at ?? 'waiting') : 'repository'}
+        stanceSaid={which === 'kehikot' ? (both?.said ?? null) : null}
+        kehikot={both?.path ?? null}
         busy={busy}
         onStart={() => void act(async (path) => {
-          const started = await ask.start(path)
+          const started = await ask.start(path, true)
           return started.ok
-            ? { ok: true, said: 'This project’s data folder is a git repository now, and this process is committing to it.' }
+            ? {
+                ok: true,
+                /*
+                 * The sentence, and it names the folder.
+                 *
+                 * What it replaced said "this project's data folder", and the
+                 * person who read it owned a folder called `data/` — which this
+                 * module has never touched — and reasonably concluded that a
+                 * program had started a repository in it. So: the path, in full,
+                 * and what the folder is, and the bound on what is in the
+                 * repository.
+                 */
+                said:
+                  `Started a git history in ${both?.path ?? 'that folder'} — the folder your modules keep this `
+                  + 'project’s material in. The repository is inside that folder and holds nothing outside it; your '
+                  + 'project’s own repository is untouched.',
+              }
             : { ok: false, error: started.why ?? 'It could not be started, and said nothing about why.' }
         })}
         onCommit={(message) => void act((path) => ask.commit(path, message.trim() || null))}
@@ -255,9 +278,10 @@ export function App() {
           <h1 className="text-sm font-semibold">History</h1>
           <p className="text-[0.7rem] leading-4 text-muted-foreground">
             Both of a project’s histories. Its own git repository holds the work. The .kehikot folder where the
-            Checklist, Notes, Learning and Journeys modules keep their data is ignored by the project, so it is a git
-            repository of its own — made and committed to by this module, a few seconds after anything in it changes,
-            with a message saying what changed.
+            Checklist, Notes, Learning and Journeys modules keep their data can have one of its own — when the project
+            ignores that folder, or has no repository at all — made only when you press for it and then committed to a
+            few seconds after anything in it changes, with a message saying what changed. Where the project’s own
+            repository already keeps that folder, this module leaves the history where you put it.
           </p>
         </header>
       )}

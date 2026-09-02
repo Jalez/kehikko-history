@@ -132,27 +132,32 @@ export const MANIFEST: Manifest = manifestSchema.parse({
      line was 260 characters when it was first written, and the schema refused it
      at import rather than a host refusing it in somebody else's log. */
   summary:
-    'Both of a project’s histories: its own repository, and the .kehikot data folder — which this module makes a '
-    + 'repository of its own and commits to a few seconds after anything changes.',
+    'Both of a project’s histories: its own repository, and the .kehikot folder — which this module can make a '
+    + 'repository of its own, when you press for one and nothing else is already keeping it.',
   /**
    * What an agent should do about this module, given that it is here.
    *
    * Written for somebody who has just arrived and does not know either
    * repository exists, because that is who reads it. Two things matter more than
-   * the rest and are said first: the data folder is versioned now, so work in it
-   * is recoverable; and this module is the only thing that commits there, so an
-   * agent should ask it rather than running git itself.
+   * the rest and are said first: whether the data folder is versioned at all is
+   * a question with an answer rather than an assumption, and this module is the
+   * only thing that commits to a repository inside it, so an agent should ask it
+   * rather than running git itself.
+   *
+   * The "MAY be" is deliberate and is the correction. This line used to say the
+   * folder IS a repository of its own, which was this module asserting a fact it
+   * had created by running `git init` in somebody's project uninvited.
    */
   guidance:
     'This project has two histories and they are separate. Its own repository holds the work; `.kehikot/` — where '
-    + 'the Checklist, Notes, Learning and Journeys modules keep their data — is a git repository of its own, made '
-    + 'and committed to by this module. That folder is ignored by the project, so its history exists only here. '
-    + 'Commits there are automatic: a burst of edits becomes one commit a few seconds later, with a message naming '
-    + 'what changed. When you have just finished a piece of work in that data, call `record` to commit it now under a '
-    + 'message you chose, rather than letting the automatic one describe it — yours will be better. Call `history` to '
-    + 'read either repository, `show_commit` for one commit in full, and `restore_file` to bring one file back from '
-    + 'an older commit. There is deliberately no tool here that switches branches or moves HEAD: doing that under a '
-    + 'running agent is how somebody loses an afternoon, so it stays a press a person makes on the page.',
+    + 'the Checklist, Notes, Learning and Journeys modules keep their data — MAY be a git repository of its own: it '
+    + 'is one when the project ignores that folder or has no repository at all AND somebody pressed to start it, and '
+    + 'deliberately not one when the project’s own repository already tracks it — two repositories over the same '
+    + 'files is a state git only half tolerates. `history` with which: "kehikot" says which you are in. Where there '
+    + 'is one, commits are automatic a few seconds after a change, and `record` makes one now under a message you '
+    + 'chose. `record` never starts a repository and never commits into the project’s own; that is a press a person '
+    + 'makes. `show_commit` reads one commit in full, `restore_file` brings one file back. There is deliberately no '
+    + 'tool here that switches branches or moves HEAD: doing that under a running agent loses somebody an afternoon.',
   entry: '/app',
   modes: [{ id: 'history', label: 'History', scope: 'global' }],
   mcp: {
