@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input.tsx'
 import { Explained, Explaining } from '@/components/ui/tooltip.tsx'
 import { Arm } from '@/view/arm.tsx'
 import { frozenReason } from '@/view/frozen.ts'
+import { absolute, age, initials } from '@/view/terse.ts'
 import type { Reading } from '@/store/ask.ts'
 
 /**
@@ -45,6 +46,34 @@ import type { Reading } from '@/store/ask.ts'
  * the badge shares its line with the date and the whole thing is two lines
  * of the small text. A short name in a `tag` badge is bounded by construction
  * and `nowrap` on it is still the only `nowrap` in the box.
+ *
+ * ## Under 320 pixels the line says the same things in fewer letters
+ *
+ * Even with the badge in the flow, at 220 the meta had 66 pixels beside the
+ * badge and `2026-08-31 09:00 · Jaakko` does not fit in them. Measured in
+ * Chrome, line one cost 36 pixels under a short name, 52 under a long one and
+ * 68 under an email-shaped one — two to four lines of 16 — in a pane 340
+ * pixels tall. So below 320 the time is a relative age (`3d`) and the author
+ * is initials (`JR`), which come to about 50 pixels and put the whole line
+ * back on one row of 24. The rules for both, and what they do with the odd
+ * names git hands over, are in `terse.ts`. The full time is the `title` on
+ * the `<time>` and the full name the `title` on the author, so both are a
+ * hover away.
+ *
+ * Both forms are in the DOM at every width, and only one is drawn. The terse
+ * one is `aria-hidden`, the full one is `sr-only` where the terse one shows,
+ * so a screen reader hears `2026-08-31 09:00 · Jaakko` in a 220-pixel pane
+ * exactly as in a 400-pixel one — a class that hides a word visually must not
+ * be the thing that decides what a person who cannot see it is told. The
+ * tests read the two forms apart by `data-terse` and `data-wide` for the same
+ * reason: what is shown small is asserted, not the class that shows it.
+ *
+ * The two boundaries are different, and measured. The time goes long at 320
+ * (`@xs/pane`): there, with 224 pixels for the meta, `2026-08-31 09:00 · JR`
+ * fits on one line and a full name does not reliably. The author goes long
+ * at 384 (`@sm/pane`): with 296 pixels, `2026-08-31 09:00 · Jaakko Rajala`
+ * fits and only a name of six words wraps. Terse always would be the worse
+ * answer — at 400 pixels there is room for words, and words are clearer.
  *
  * ## An armed "Go here" is words, and it takes a line of its own
  *
@@ -115,6 +144,10 @@ export function Commits({
   const [file, setFile] = useState('')
   const data = reading.which === 'kehikot'
   const frozen = reading.dirty.length > 0
+  /* Once per render, not once per row: forty rows reading the clock forty
+     times is forty chances for the top of the list and the bottom to
+     disagree about what "now" is across a minute boundary. */
+  const now = Date.now()
 
   if (reading.commits.length === 0) {
     return (
@@ -149,7 +182,23 @@ export function Commits({
                   reader a margin is nothing, and `bbbbbbb2026-08-31` is one
                   word. */}
               {' '}
-              {one.at.slice(0, 16).replace('T', ' ')} · {one.who}
+              <time dateTime={one.at} title={one.at}>
+                <span data-terse aria-hidden="true" className="@xs/pane:hidden">
+                  {age(one.at, now)}
+                </span>
+                <span data-wide className="@max-xs/pane:sr-only">
+                  {absolute(one.at)}
+                </span>
+              </time>
+              {' · '}
+              <span title={one.who}>
+                <span data-terse aria-hidden="true" className="@sm/pane:hidden">
+                  {initials(one.who)}
+                </span>
+                <span data-wide className="@max-sm/pane:sr-only">
+                  {one.who}
+                </span>
+              </span>
             </span>
             {/* `min-w-0` and no `shrink-0` on the group, and both are
                 load-bearing — see the essay on the armed state. The two icon

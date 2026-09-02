@@ -101,7 +101,19 @@ export function Arm({
       variant="outline"
       aria-label={icon && !armed ? label : undefined}
       disabled={disabled}
-      className={cn(armed && 'border-failed/60 text-failed', className)}
+      /* Armed, the label WRAPS. shadcn's button is `whitespace-nowrap`, which
+         is right for `Cancel` and wrong for `Overwrite notes/a/really/long/
+         path.json`: the armed label names the specific thing about to happen,
+         and a path is not bounded by anything. Measured in Chrome before this
+         line existed — the restore box armed over a 54-character path set
+         `document.body.scrollWidth` to 293 on a 220-pixel pane and 343 on a
+         320-pixel one. The essay in `badge.tsx` is about exactly this, one
+         component over. `h-auto` with the pane height as a minimum, because a
+         label on two lines cannot be 24 pixels tall. */
+      className={cn(
+        armed && 'h-auto min-h-6 whitespace-normal py-0.5 text-left [overflow-wrap:anywhere] border-failed/60 text-failed',
+        className,
+      )}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={() => {
         if (!armed) {

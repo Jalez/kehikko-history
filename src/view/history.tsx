@@ -1,3 +1,4 @@
+import { FileDiff, History as HistoryIcon } from 'lucide-react'
 import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge.tsx'
@@ -156,10 +157,32 @@ export function History({
       ) : null}
 
       <Tabs value={tab} onValueChange={(next) => setTab(next === 'uncommitted' ? 'uncommitted' : 'commits')}>
+        {/* Under 320 pixels the tabs are icons, and the count stays.
+            `Uncommitted (4)` at the tab's 12-pixel font is 104 pixels wide,
+            which is exactly what a trigger gets at 220 — `(12)` was already
+            past it, and a nowrap label past its trigger draws over its
+            neighbour. The accessible name is an explicit `aria-label` that
+            is the same words at every width, so a tab is `Uncommitted (4)`
+            to a screen reader and to a test whether it is drawn as the words
+            or as an icon and a number; `title` gives the words on hover.
+            (The name was first left to the content, with the words `sr-only`
+            when small — and a name assembled from three inline pieces came
+            out with spaces in it in the harness. An explicit name is one
+            string in one place.) The icons are hidden outright from 320 up. */}
         <TabsList aria-label="Committed and uncommitted">
-          <TabsTrigger value="commits">Commits</TabsTrigger>
-          <TabsTrigger value="uncommitted" data-count={reading.dirty.length}>
-            Uncommitted ({reading.dirty.length})
+          <TabsTrigger value="commits" aria-label="Commits" title="Commits">
+            <HistoryIcon aria-hidden="true" className="size-3.5 @xs/pane:hidden" />
+            <span className="hidden @xs/pane:inline">Commits</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="uncommitted"
+            data-count={reading.dirty.length}
+            aria-label={`Uncommitted (${reading.dirty.length})`}
+            title={`Uncommitted (${reading.dirty.length})`}
+          >
+            <FileDiff aria-hidden="true" className="size-3.5 @xs/pane:hidden" />
+            <span className="hidden @xs/pane:inline">Uncommitted ({reading.dirty.length})</span>
+            <span className="@xs/pane:hidden">{reading.dirty.length}</span>
           </TabsTrigger>
         </TabsList>
         <TabsContent value="commits">

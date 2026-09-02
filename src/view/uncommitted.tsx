@@ -68,14 +68,30 @@ type Act = { what: 'commit' | 'discard'; entries: Dirty[] }
 /** How many rows are listed before the list says "and N more". A bound on the pane, not on the commit. */
 const LISTED = 200
 
-/** The word and the colour for each kind. The words are the ones a person would use; the colours agree with them. */
-const KINDS: Record<Kind, { word: string; variant: 'tag' | 'here' | 'loud' }> = {
-  modified: { word: 'modified', variant: 'tag' },
-  new: { word: 'new', variant: 'here' },
-  untracked: { word: 'untracked', variant: 'here' },
-  deleted: { word: 'deleted', variant: 'loud' },
-  renamed: { word: 'renamed', variant: 'tag' },
-  conflicted: { word: 'conflict', variant: 'loud' },
+/**
+ * The word, the letter and the colour for each kind.
+ *
+ * The words are the ones a person would use; the colours agree with them. The
+ * letter is what the badge shows in a pane under 320 pixels, where `untracked`
+ * beside a checkbox and two icons left a path 90 pixels to wrap in — every
+ * row was two lines. A letter is 22 pixels and most paths share its line.
+ *
+ * The letters are six DIFFERENT letters, and a test holds that, because the
+ * whole reason the column exists is that a person can tell a new file from a
+ * deleted one before pressing discard on it: `N` and `D` are as far apart as
+ * the words, and the colour is still red for what takes something away. `N`
+ * and `U` are both green, as the words both are — an added file and one git
+ * has not been told about are the same kind of thing from where a person
+ * stands, and the distinction is kept for anybody who wants it in the word
+ * that is still in the DOM.
+ */
+const KINDS: Record<Kind, { word: string; letter: string; variant: 'tag' | 'here' | 'loud' }> = {
+  modified: { word: 'modified', letter: 'M', variant: 'tag' },
+  new: { word: 'new', letter: 'N', variant: 'here' },
+  untracked: { word: 'untracked', letter: 'U', variant: 'here' },
+  deleted: { word: 'deleted', letter: 'D', variant: 'loud' },
+  renamed: { word: 'renamed', letter: 'R', variant: 'tag' },
+  conflicted: { word: 'conflict', letter: 'C', variant: 'loud' },
 }
 
 export function Uncommitted({
@@ -276,13 +292,27 @@ export function Uncommitted({
   )
 }
 
-/** One row's word and path. A rename shows where it came from, because "renamed" without a from is a riddle. */
+/**
+ * One row's word and path. A rename shows where it came from, because
+ * "renamed" without a from is a riddle.
+ *
+ * The badge holds both the letter and the word, and draws one. Under 320
+ * pixels the word is `sr-only` — still in the DOM, still what a screen reader
+ * says, still what `title` shows on hover — and the letter is drawn beside
+ * the path; from 320 up the letter is `hidden` and the word is back. The
+ * letter is `aria-hidden` at every width so nobody is read `M modified`.
+ */
 function Row({ entry }: { entry: Dirty }) {
   const kind = KINDS[entry.kind]
   return (
     <span className="flex min-w-0 flex-1 flex-wrap items-start gap-x-1">
-      <Badge variant={kind.variant} data-kind={entry.kind}>
-        {kind.word}
+      <Badge variant={kind.variant} data-kind={entry.kind} title={kind.word}>
+        <span data-letter aria-hidden="true" className="@xs/pane:hidden">
+          {kind.letter}
+        </span>
+        <span data-word className="@max-xs/pane:sr-only">
+          {kind.word}
+        </span>
       </Badge>
       <span className="min-w-0 [overflow-wrap:anywhere]">
         {entry.from ? (
