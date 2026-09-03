@@ -198,6 +198,47 @@ describe('nothing a request supplies reaches git unchecked', () => {
     rmSync(project, { recursive: true, force: true })
   })
 
+  test('push and pull are doors, carry the ticket, and hand git exactly one forward refspec', async () => {
+    const project = scratch()
+    mkdirSync(join(project, '.kehikot', '.git'), { recursive: true })
+    const US = '\x1f'
+    const current = ['*', 'main', 'origin/main', 'origin', 'refs/heads/main', 'ahead 1', 'origin/main', 'origin', 'refs/heads/main', 'ahead 1'].join(US)
+    const { run, calls } = fakeGit({
+      config: { ok: true, out: 'remote.origin.url /tmp/origin.git\n' },
+      'for-each-ref': { ok: true, out: current },
+      'rev-parse HEAD': { ok: true, out: 'a'.repeat(40) },
+    })
+
+    const refused = await post('/api/push', { project, which: 'kehikot' }, run, null)
+    expect(refused?.status).toBe(403)
+
+    const pushed = await post('/api/push', { project, which: 'kehikot' }, run)
+    expect((pushed?.body as { ok: boolean; said: string }).ok).toBe(true)
+    expect((pushed?.body as { said: string }).said).toBe('Pushed 1 commit to origin/main.')
+    expect(calls.find((args) => args.includes('push'))).toEqual(['push', 'origin', 'refs/heads/main:refs/heads/main'])
+
+    const pulled = await post('/api/pull', { project, which: 'kehikot' }, run)
+    expect((pulled?.body as { ok: boolean }).ok).toBe(true)
+    expect(calls.find((args) => args.includes('pull'))).toEqual(['pull', '--ff-only', '--no-rebase', 'origin', 'refs/heads/main'])
+    /* Nothing that ran carried a flag the allowlist refuses; the fake runner
+       does not vet, so this is asserted on the arrays themselves. */
+    for (const args of calls) {
+      expect(args.some((arg) => /^--force|^-f$|^--delete|^--mirror|^--rebase|^--receive-pack|^--upload-pack/.test(arg))).toBe(false)
+    }
+    rmSync(project, { recursive: true, force: true })
+  })
+
+  test('there is no MCP tool that pushes or pulls', async () => {
+    const { run, calls } = fakeGit()
+    const reply = await answer('POST', '/mcp', new URLSearchParams(), { jsonrpc: '2.0', id: 1, method: 'tools/list' }, null, run)
+    const names = ((reply?.body as { result: { tools: { name: string }[] } }).result.tools).map((tool) => tool.name)
+    expect(names).not.toContain('push')
+    expect(names).not.toContain('pull')
+    const tried = await answer('POST', '/mcp', new URLSearchParams(), rpc('push', { project: '/tmp' }), null, run)
+    expect(isError(tried)).toBe(true)
+    expect(calls).toHaveLength(0)
+  })
+
   test('a project path that is not absolute is refused with the reason', async () => {
     const { run } = fakeGit()
     const reply = await answer('GET', '/api/histories', new URLSearchParams([['project', 'relative/thing']]), null, null, run)

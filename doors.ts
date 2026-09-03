@@ -8,6 +8,7 @@ import { commitNow, locate, look, read, standing, watching, type Standing } from
 import { saying, type Stance } from './git/enclosing.ts'
 import { commitPaths, discard, projectRepo, restore, show, stash, switchTo, type At, type Reading } from './git/repo.ts'
 import { which as readWhich, type Which } from './git/names.ts'
+import { pull, push } from './git/remote.ts'
 import { spawnGit, type GitRunner } from './git/run.ts'
 
 /**
@@ -345,6 +346,23 @@ function readingText(reading: Reading): string {
   if (reading.branches.length) {
     lines.push('', `Branches: ${reading.branches.map((b) => (b.current ? `${b.name} (here)` : b.name)).join(', ')}`)
   }
+  /* The remote, in the same terms the page's push and pull controls use, and
+     with the same honesty about which number is current: `ahead` is local
+     knowledge, `behind` is as old as the last fetch. */
+  const remote = reading.remote
+  if (remote && remote.remotes.length) {
+    if (remote.branch && remote.upstream) {
+      lines.push(
+        `${remote.branch} tracks ${remote.upstream}: ${remote.ahead} ahead${remote.pushTo && remote.pushTo !== remote.upstream ? ` of ${remote.pushTo}` : ''}, `
+          + `${remote.behind} behind${remote.gone ? ' (the upstream branch is gone from the remote)' : ''}`
+          + (remote.fetchedAt ? ` — behind as of the last fetch, ${remote.fetchedAt}.` : ' — never fetched, so behind is unknown.'),
+      )
+    } else if (remote.branch) {
+      lines.push(`${remote.branch} has no upstream. Remotes: ${remote.remotes.join(', ')}.`)
+    }
+  } else if (reading.present) {
+    lines.push('No remote.')
+  }
   if (reading.commits.length) {
     lines.push('', 'Commits, newest first:')
     for (const one of reading.commits) lines.push(`  ${one.short}  ${one.at.slice(0, 16).replace('T', ' ')}  ${one.who}  ${one.subject}`)
@@ -541,6 +559,25 @@ export async function answer(
     if (path === '/api/stash') {
       const done = await stash(root.cwd, git)
       return ok(done.ok ? { ok: true, said: done.said } : { ok: false, error: done.said })
+    }
+
+    /*
+     * The two network presses. Page-only, like every write here — there is no
+     * MCP tool for either, and that is the same decision as for checkout:
+     * a pull moves the working tree under whoever is editing in it, and a
+     * push publishes what an agent may not have been asked to publish. Both
+     * stay presses a person makes, on a control that says what will happen.
+     * `own` runs the person's own pre-push and post-merge hooks in their own
+     * repository; see `commitPaths`.
+     */
+    if (path === '/api/push') {
+      const done = await push(root.cwd, git, wanted.value === 'project')
+      return ok(done.ok ? { ok: true, said: done.said } : { ok: false, error: done.said })
+    }
+
+    if (path === '/api/pull') {
+      const done = await pull(root.cwd, git, wanted.value === 'project')
+      return ok(done.ok ? { ok: true, said: done.said } : { ok: false, error: done.said, wouldLose: done.wouldLose })
     }
 
     if (path === '/api/show') {

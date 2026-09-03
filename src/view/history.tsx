@@ -50,6 +50,8 @@ export function History({
   onCommitPaths,
   onDiscard,
   onMove,
+  onPush,
+  onPull,
   onRestore,
   onShow,
   shown,
@@ -68,6 +70,9 @@ export function History({
   onCommitPaths: (entries: Dirty[], message: string) => void
   onDiscard: (entries: Dirty[]) => void
   onMove: (target: { branch?: string; commit?: string; create?: boolean }) => void
+  /** The two network presses. Whether either is offered is decided in `Head` from `reading.remote`; see `git/remote.ts`. */
+  onPush: () => void
+  onPull: () => void
   onRestore: (commit: string, path: string, overwrite: boolean) => void
   onShow: (commit: string) => void
   /** The text of a commit somebody opened, keyed by object name. */
@@ -128,7 +133,7 @@ export function History({
 
   return (
     <section className="flex min-w-0 flex-col gap-2">
-      <Head reading={reading} busy={busy} onMove={onMove} />
+      <Head reading={reading} busy={busy} onMove={onMove} onPush={onPush} onPull={onPull} />
 
       {reading.head.detached ? (
         <p className="rounded border border-detached/40 bg-detached/5 px-2 py-1.5 text-[0.65rem] leading-4 text-detached">

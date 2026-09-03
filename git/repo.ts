@@ -5,6 +5,7 @@ import { KEHIKOT_DIR, kehikotDir, within } from 'roadmap-module-protocol'
 
 import { hooked, mayInit, refusal, saying, type Stance } from './enclosing.ts'
 import { branchName, commitish, message as checkMessage, repoPath, type Which } from './names.ts'
+import { tracking, type Tracking } from './remote.ts'
 import type { GitRunner, GitResult } from './run.ts'
 
 /**
@@ -407,6 +408,12 @@ export interface Reading {
   commits: Commit[]
   branches: Branch[]
   dirty: Dirty[]
+  /**
+   * What the current branch tracks and how far apart they are, for the push
+   * and pull controls. Null when there is no repository. See `git/remote.ts`
+   * for which of its numbers is current and which is as old as the last fetch.
+   */
+  remote: Tracking | null
   /** Anything git said that a person should see. */
   trouble: string | null
 }
@@ -435,6 +442,7 @@ export async function read(root: string, which: Which, git: GitRunner): Promise<
     commits: [],
     branches: [],
     dirty: [],
+    remote: null,
     trouble: null,
   }
 
@@ -479,12 +487,13 @@ export async function read(root: string, which: Which, git: GitRunner): Promise<
   }
 
   const cwd = found || root
-  const [headRef, headSha, log, branches, status] = await Promise.all([
+  const [headRef, headSha, log, branches, status, remote] = await Promise.all([
     git(['symbolic-ref', '--quiet', '--short', 'HEAD'], { cwd }),
     git(['rev-parse', 'HEAD'], { cwd }),
     git(['log', `--max-count=${PAGE}`, LOG_FORMAT], { cwd }),
     git(['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${FIELD}%(objectname)`, 'refs/heads/'], { cwd }),
     git(['status', '--porcelain', '-z'], { cwd }),
+    tracking(cwd, git),
   ])
 
   const branch = headRef.ok ? headRef.out.trim() || null : null
@@ -503,6 +512,7 @@ export async function read(root: string, which: Which, git: GitRunner): Promise<
     commits: log.ok ? parseLog(log.out) : [],
     branches: branches.ok ? parseBranches(branches.out, branch) : [],
     dirty: status.ok ? parseStatus(status.out) : [],
+    remote,
     trouble: trouble([headSha, log, branches, status]),
   }
 }

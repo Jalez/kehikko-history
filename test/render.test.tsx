@@ -32,6 +32,17 @@ const reading = (over: Partial<Reading> = {}): Reading => ({
   ],
   branches: [{ name: 'main', current: true, sha: 'a'.repeat(40) }],
   dirty: [],
+  remote: {
+    remotes: ['origin'],
+    branch: 'main',
+    upstream: 'origin/main',
+    pushTo: 'origin/main',
+    ahead: 0,
+    behind: 0,
+    gone: false,
+    publishTo: null,
+    fetchedAt: '2026-08-31T09:00:00Z',
+  },
   trouble: null,
   ...over,
 })
@@ -67,6 +78,8 @@ const paint = (over: Partial<Reading> = {}, extra: Partial<Parameters<typeof His
       onCommitPaths={nothing}
       onDiscard={nothing}
       onMove={nothing}
+      onPush={nothing}
+      onPull={nothing}
       onRestore={nothing}
       onShow={nothing}
       shown={null}
@@ -191,6 +204,116 @@ describe('the row above the tabs: branch and commit', () => {
     expect(document.querySelector('[data-detached="yes"]')).toBe(null)
     expect(document.body.textContent).toContain('no commits yet')
     expect(document.body.textContent).toContain('No commits here yet')
+  })
+})
+
+describe('push and pull sit on the branch row, and say what they will do', () => {
+  const tracking = (over: Partial<NonNullable<Reading['remote']>> = {}): Reading['remote'] => ({
+    remotes: ['origin'],
+    branch: 'main',
+    upstream: 'origin/main',
+    pushTo: 'origin/main',
+    ahead: 0,
+    behind: 0,
+    gone: false,
+    publishTo: null,
+    fetchedAt: '2026-08-31T09:00:00Z',
+    ...over,
+  })
+
+  test('both are in the same row as the select and the badge', () => {
+    paint({ remote: tracking({ ahead: 2, behind: 1 }) })
+    const row = screen.getByRole('combobox', { name: 'Branch' }).closest('div.flex.items-center')
+    expect(row).not.toBeNull()
+    expect(within(row as HTMLElement).getByRole('button', { name: 'Push' })).toBeTruthy()
+    expect(within(row as HTMLElement).getByRole('button', { name: 'Pull' })).toBeTruthy()
+    expect(within(row as HTMLElement).getByText('aaaaaaa')).toBeTruthy()
+  })
+
+  test('ahead and behind are the numbers on the controls, and the words are there for wider panes', () => {
+    paint({ remote: tracking({ ahead: 2, behind: 1 }) })
+    const push = screen.getByRole('button', { name: 'Push' })
+    const pull = screen.getByRole('button', { name: 'Pull' })
+    expect(push.getAttribute('data-count')).toBe('2')
+    expect(pull.getAttribute('data-count')).toBe('1')
+    expect(push.textContent).toBe('push2')
+    expect(pull.textContent).toBe('pull1')
+    /* The word is hidden below `@xs/pane` and the number is not: the number
+       is what the control is for. happy-dom does no layout, so what is
+       asserted is the class that decides it, as the tab test does. */
+    expect(push.querySelector('span:not(.tabular-nums)')?.className).toContain('@xs/pane:inline')
+    expect(push.querySelector('.tabular-nums')?.className).not.toContain('hidden')
+  })
+
+  test('pressing them calls the two handlers, once each', () => {
+    let pushed = 0
+    let pulled = 0
+    paint({ remote: tracking({ ahead: 1, behind: 1 }) }, { onPush: () => (pushed += 1), onPull: () => (pulled += 1) })
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pull' }))
+    expect(pushed).toBe(1)
+    expect(pulled).toBe(1)
+  })
+
+  test('nothing to push is grey with the reason in the DOM, and pull stays on with the age of its number', () => {
+    paint({ remote: tracking() })
+    const push = screen.getByRole('button', { name: 'Push' })
+    expect(push.hasAttribute('disabled')).toBe(true)
+    expect(push.getAttribute('data-why')).toBe('nothing')
+    expect(document.getElementById('push-off')?.textContent).toBe('Nothing to push: origin/main already has every commit on main.')
+    const pull = screen.getByRole('button', { name: 'Pull' })
+    expect(pull.hasAttribute('disabled')).toBe(false)
+    expect(document.getElementById('pull-off')).toBe(null)
+  })
+
+  test('no remote greys both, with the same sentence', () => {
+    paint({ remote: tracking({ remotes: [], upstream: null, pushTo: null }) })
+    expect(screen.getByRole('button', { name: 'Push' }).getAttribute('data-why')).toBe('no-remote')
+    expect(screen.getByRole('button', { name: 'Pull' }).getAttribute('data-why')).toBe('no-remote')
+    expect(document.getElementById('push-off')?.textContent).toContain('git remote add origin')
+  })
+
+  test('no upstream: push becomes publish, pull is grey and says push sets one', () => {
+    paint({ remote: tracking({ upstream: null, pushTo: null, publishTo: 'origin' }) })
+    const push = screen.getByRole('button', { name: 'Push' })
+    expect(push.hasAttribute('disabled')).toBe(false)
+    expect(push.textContent).toBe('publish')
+    const pull = screen.getByRole('button', { name: 'Pull' })
+    expect(pull.getAttribute('data-why')).toBe('no-upstream')
+    expect(document.getElementById('pull-off')?.textContent).toContain('Pushing publishes it and sets one')
+  })
+
+  test('uncommitted changes grey pull, for the reason the select is frozen, and not push', () => {
+    paint({ dirty: [dirty(' M', 'a')], remote: tracking({ ahead: 1, behind: 1 }) })
+    const pull = screen.getByRole('button', { name: 'Pull' })
+    expect(pull.getAttribute('data-why')).toBe('dirty')
+    expect(document.getElementById('pull-off')?.textContent).toContain('Pull is off while 1 change is uncommitted')
+    expect(screen.getByRole('button', { name: 'Push' }).hasAttribute('disabled')).toBe(false)
+  })
+
+  test('detached HEAD greys both and says why', () => {
+    paint({ head: { branch: null, detached: true, sha: 'c'.repeat(40) }, remote: tracking({ branch: null }) })
+    expect(screen.getByRole('button', { name: 'Push' }).getAttribute('data-why')).toBe('detached')
+    expect(screen.getByRole('button', { name: 'Pull' }).getAttribute('data-why')).toBe('detached')
+  })
+
+  test('busy greys both without changing the reason', () => {
+    paint({ remote: tracking({ ahead: 1 }) }, { busy: true })
+    expect(screen.getByRole('button', { name: 'Push' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Push' }).getAttribute('data-why')).toBe('none')
+  })
+
+  test('a grey press is wrapped so it can still be pointed at, and a live one is not', () => {
+    paint({ remote: tracking({ ahead: 1 }) })
+    /* `Explaining` puts a tabIndex=0 span round a disabled control, because a
+       disabled control emits no pointer events; `Explained` hangs the tooltip
+       off the control itself. */
+    expect(screen.getByRole('button', { name: 'Pull' }).parentElement?.tagName).not.toBe('SPAN')
+    paint({ remote: tracking() })
+    const off = screen.getAllByRole('button', { name: 'Push' }).at(-1)
+    expect(off?.parentElement?.tagName).toBe('SPAN')
+    expect(off?.parentElement?.getAttribute('tabindex')).toBe('0')
+    expect(off?.parentElement?.getAttribute('aria-describedby')).toBe('push-off')
   })
 })
 

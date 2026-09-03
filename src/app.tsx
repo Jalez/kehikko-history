@@ -270,6 +270,8 @@ export function App() {
         onCommitPaths={(entries, message) => void act((path) => ask.commitPaths(path, facing, entries, message))}
         onDiscard={(entries) => void act((path) => ask.discard(path, facing, entries))}
         onMove={(target) => void act((path) => ask.move(path, facing, target))}
+        onPush={() => void act((path) => ask.push(path, facing))}
+        onPull={() => void act((path) => ask.pull(path, facing))}
         onRestore={(commitName, file, overwrite) => void act((path) => ask.restore(path, facing, commitName, file, overwrite))}
         onShow={(sha) =>
           void act(async (path) => {

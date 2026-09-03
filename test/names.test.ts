@@ -139,12 +139,64 @@ describe('the subcommand allowlist, which is the guard rather than a formality',
     }
   })
 
-  test('nothing that reaches a remote is allowed', () => {
-    for (const name of ['push', 'fetch', 'pull', 'clone', 'remote', 'submodule']) {
+  /*
+   * The network, as it now stands. `push` and `pull` are allowed — that was a
+   * guarantee traded for two buttons, and the essay in `git/run.ts` says what
+   * replaced it. These tests are the care that replacement asks for: every way
+   * of turning a fast-forward push into a rewrite, a delete, or a program run
+   * on the far end is refused, and refused in BOTH spellings git accepts.
+   */
+  test('push and pull are allowed; editing remotes and making repositories are not', () => {
+    expect(vetted(['push', 'origin', 'refs/heads/main:refs/heads/main']).ok).toBe(true)
+    expect(vetted(['push', '--set-upstream', 'origin', 'refs/heads/main:refs/heads/main']).ok).toBe(true)
+    expect(vetted(['pull', '--ff-only', '--no-rebase', 'origin', 'refs/heads/main']).ok).toBe(true)
+    for (const name of ['fetch', 'clone', 'remote', 'submodule']) {
       const refused = vetted([name])
       expect(refused.ok).toBe(false)
-      expect(refused.ok === false && refused.why).toContain('no push')
+      expect(refused.ok === false && refused.why).toContain('only ever forward')
     }
+  })
+
+  test('a push cannot rewrite or delete published history by any flag', () => {
+    for (const flag of ['--force', '-f', '--force-with-lease', '--force-with-lease=main', '--force-if-includes', '--mirror', '--delete', '-d', '--prune']) {
+      const refused = vetted(['push', flag, 'origin', 'main'])
+      expect(refused.ok).toBe(false)
+      expect(refused.ok === false && refused.why).toContain('not a flag this module passes')
+    }
+  })
+
+  test('a push cannot rewrite or delete by refspec either', () => {
+    expect(vetted(['push', 'origin', '+refs/heads/main:refs/heads/main']).ok).toBe(false)
+    expect(vetted(['push', 'origin', '+main']).ok).toBe(false)
+    expect(vetted(['push', 'origin', ':refs/heads/main']).ok).toBe(false)
+    expect(vetted(['push', 'origin', ':main']).ok).toBe(false)
+    expect(vetted(['pull', 'origin', '+main']).ok).toBe(false)
+  })
+
+  test('the programs on either end cannot be chosen, in either spelling', () => {
+    for (const args of [
+      ['push', '--receive-pack', '/tmp/evil', 'origin', 'main'],
+      ['push', '--receive-pack=/tmp/evil', 'origin', 'main'],
+      ['push', '--exec=/tmp/evil', 'origin', 'main'],
+      ['pull', '--upload-pack', '/tmp/evil', 'origin', 'main'],
+      ['pull', '--upload-pack=/tmp/evil', 'origin', 'main'],
+      ['-c', 'core.sshCommand=/tmp/evil', 'push', 'origin', 'main'],
+      ['-c', 'credential.helper=!/tmp/evil', 'push', 'origin', 'main'],
+      ['-c', 'remote.origin.uploadpack=/tmp/evil', 'pull', 'origin', 'main'],
+    ]) {
+      expect(vetted(args).ok).toBe(false)
+    }
+  })
+
+  test('a pull cannot rebase, and a push cannot amend', () => {
+    expect(vetted(['pull', '--rebase', 'origin', 'main']).ok).toBe(false)
+    expect(vetted(['pull', '--rebase=merges', 'origin', 'main']).ok).toBe(false)
+    expect(vetted(['push', '--amend']).ok).toBe(false)
+  })
+
+  test('--flag=value is read as --flag everywhere, not only on the network', () => {
+    expect(vetted(['commit', '--amend=whatever', '-m', 'x']).ok).toBe(false)
+    expect(vetted(['reset', '--hard=HEAD']).ok).toBe(false)
   })
 
   test('nothing that rewrites or discards is allowed', () => {
