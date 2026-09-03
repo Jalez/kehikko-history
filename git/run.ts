@@ -31,10 +31,6 @@ import { spawn } from 'node:child_process'
  * What is deliberately absent, and named in the refusal so the absence is
  * readable rather than mysterious:
  *
- * - **`push`.** This module has no network path at all. There is nothing here
- *   that can rewrite published history because there is nothing here that can
- *   reach a remote — which is a stronger guarantee than a careful `push` would
- *   be, and needs no care to keep.
  * - **`reset`.** `--hard` destroys uncommitted work with no record of what it
  *   was. The honest replacement is `restore` on one named file from one named
  *   commit, which is reversible because the thing it overwrites was committed.
@@ -43,12 +39,67 @@ import { spawn } from 'node:child_process'
  * - **`rebase`, `filter-branch`, `commit --amend`, `gc --prune`.** All of them
  *   rewrite or discard commits that already exist. Recovery is what this module
  *   is for; a tool that edits the past is the opposite of it.
- * - **`remote`, `fetch`, `pull`, `clone`, `submodule`.** Same reason as `push`:
- *   no network.
+ * - **`remote`, `clone`, `submodule`.** `remote` adds, removes and re-points
+ *   remotes, which is configuration a person writes once in a terminal and
+ *   should not find changed by a pane; the other two make repositories, which
+ *   this module does in exactly one place (`ensure()` in `repo.ts`) and
+ *   nowhere else.
  *
  * `--amend` is refused as a flag as well as `reset` being refused as a
  * subcommand, because `commit` is on the list and `commit --amend` is not the
  * same act as `commit`.
+ *
+ * ## The network, and the guarantee that was traded for it
+ *
+ * This list used to say, of `push`: *this module has no network path at all —
+ * there is nothing here that can rewrite published history because there is
+ * nothing here that can reach a remote, which is a stronger guarantee than a
+ * careful push would be, and needs no care to keep.* That was true, it was
+ * argued for on purpose, and it is no longer the case: `pull` and `push` are
+ * on the list, because a person asked for a push button and a pull button
+ * beside the branch, and a history pane that can see a remote and never touch
+ * it is a pane that sends them to a terminal for the two commands they run
+ * most. `fetch` on its own is not on the list — nothing presses for it, and
+ * `pull` is the fetch this pane offers — but it is in `NETWORK` below, so that
+ * adding it later gets the timeout, the session and the refspec rule for free
+ * rather than by remembering.
+ *
+ * What replaces the guarantee is narrower and it DOES need care to keep, so
+ * here is exactly what it is:
+ *
+ * - **A push from here can only fast-forward a remote branch.** `--force`,
+ *   `--force-with-lease`, `--mirror`, `--delete`, `-d` and `--prune` are
+ *   refused as flags, and a refspec beginning with `+` (which is `--force` for
+ *   one ref) or with `:` (which is a delete) is refused as an argument. Git
+ *   itself refuses the rest: a push that is not a fast-forward is rejected by
+ *   the far end, and the sentence it comes back with says to fetch first. So
+ *   the published-history argument still holds, one step further down — nothing
+ *   here can rewrite a commit that has left this machine, because nothing here
+ *   can send anything but new commits on top of what is there.
+ * - **A pull from here can only fast-forward the local branch.** `remote.ts`
+ *   passes `--ff-only` and `--no-rebase` and nothing else; `--rebase` is refused
+ *   as a flag for the same reason `rebase` is refused as a subcommand. A pull
+ *   that would need a merge is refused by git and changes nothing, which is the
+ *   only outcome this pane can draw — it has no view of a conflict and no
+ *   control that resolves one.
+ * - **Nothing here chooses the program that runs on either end.** `--exec`,
+ *   `--upload-pack` and `--receive-pack` — in both their two-argument and their
+ *   `--flag=value` spellings — are how a fetch or a push names an arbitrary
+ *   program for git to run, and they are refused. `-c` is still limited to the
+ *   three keys in `SETTABLE`, so `core.sshCommand`, `credential.helper` and
+ *   `remote.<name>.uploadpack` cannot be smuggled in beside a `push` either.
+ * - **Nothing here can wait on a prompt.** A network call is the one kind of
+ *   git call that stops and asks — for a password, a passphrase, a host key —
+ *   and there is no terminal to ask on, only an HTTP request that would hold
+ *   the pane until the timeout. `strippedEnv` turns every prompt off so that
+ *   git fails in under a second with a sentence instead; see the essay there.
+ *
+ * The care this needs, stated so it is not forgotten: a flag added to
+ * `REFUSED_FLAGS` protects `push` only while the check reads `--flag=value` as
+ * `--flag`, and a refspec is an argument rather than a flag, so the `+`/`:`
+ * rule below is a second check and not a restatement of the first. Both are
+ * tested directly in `test/names.test.ts`, and a change here that makes one of
+ * those tests go green for a new reason is a change to read twice.
  *
  * ## `-c core.hooksPath=` on every call, and why
  *
@@ -84,6 +135,8 @@ export type GitRunner = (args: string[], options: { cwd: string }) => Promise<Gi
  */
 export const ALLOWED = new Set([
   'init',
+  'pull',
+  'push',
   'status',
   'add',
   'commit',
@@ -105,8 +158,34 @@ export const ALLOWED = new Set([
   'cat-file',
 ])
 
-/** Flags that turn an allowed subcommand into a disallowed act. */
-const REFUSED_FLAGS = new Set(['--amend', '--hard', '--force', '-f', '--force-with-lease', '--exec', '--upload-pack', '--receive-pack'])
+/**
+ * Flags that turn an allowed subcommand into a disallowed act.
+ *
+ * Matched on the part before any `=`, so `--receive-pack=evil` is the same flag
+ * as `--receive-pack evil`. Git accepts both spellings for every long option,
+ * which means an exact-match set would have been a set with a hole beside every
+ * entry — invisible while nothing here could reach a remote, and the first thing
+ * to check once something could.
+ */
+const REFUSED_FLAGS = new Set([
+  '--amend',
+  '--hard',
+  '--force',
+  '-f',
+  '--force-with-lease',
+  '--force-if-includes',
+  '--mirror',
+  '--delete',
+  '-d',
+  '--prune',
+  '--rebase',
+  '--exec',
+  '--upload-pack',
+  '--receive-pack',
+])
+
+/** The subcommands that talk to a remote, which decides their timeout, their session and their refspec rule. */
+export const NETWORK = new Set(['fetch', 'pull', 'push'])
 
 /**
  * `-f` is refused above, and two allowed subcommands use it for something
@@ -189,19 +268,41 @@ export function vetted(args: string[]): Vetted {
     return {
       ok: false,
       why:
-        `This module does not run \`git ${subcommand}\`. It runs a short list on purpose: no push, no reset, no `
-        + 'clean, no rebase and nothing that reaches a remote. Recovery is what it is for, so it will not rewrite or '
-        + 'discard what is already committed, and it will not delete files git has never seen.',
+        `This module does not run \`git ${subcommand}\`. It runs a short list on purpose: no reset, no clean, no `
+        + 'rebase, nothing that edits remotes and nothing that makes a repository. Recovery is what it is for, so it '
+        + 'will not rewrite or discard what is already committed, and it will not delete files git has never seen. '
+        + 'It fetches, pulls and pushes, and only ever forward.',
     }
   }
   for (const arg of args) {
-    if (!REFUSED_FLAGS.has(arg)) continue
-    if (arg === '-f' && SOFT_F[subcommand]) continue
+    const flag = arg.startsWith('--') ? (arg.split('=')[0] ?? arg) : arg
+    if (!REFUSED_FLAGS.has(flag)) continue
+    if (flag === '-f' && SOFT_F[subcommand]) continue
     return {
       ok: false,
       why:
-        `\`${arg}\` is not a flag this module passes to git. It is on the short list of things that rewrite history `
-        + 'or throw away work without saying what was in it, and there is no press on this page that needs one.',
+        `\`${flag}\` is not a flag this module passes to git. It is on the short list of things that rewrite history, `
+        + 'throw away work without saying what was in it, or name a program for git to run, and there is no press on '
+        + 'this page that needs one.',
+    }
+  }
+  /*
+   * A refspec is an argument, not a flag, and two characters at the front of one
+   * do what two refused flags do: `+refs/heads/x` is a forced update of that one
+   * ref, and `:refs/heads/x` — nothing before the colon — deletes it on the far
+   * end. Neither is anything this module composes, so both are refused outright
+   * on the three subcommands that take a refspec at all.
+   */
+  if (NETWORK.has(subcommand)) {
+    for (const arg of args) {
+      if (arg.startsWith('+') || arg.startsWith(':')) {
+        return {
+          ok: false,
+          why:
+            `\`${arg}\` is a refspec that ${arg.startsWith('+') ? 'forces an update' : 'deletes a branch'} on the remote, `
+            + 'which is what this module refuses --force and --delete for. It pushes one branch forward and nothing else.',
+        }
+      }
     }
   }
   /*
@@ -237,69 +338,149 @@ export const PREFIX = ['--no-pager', '-c', 'core.hooksPath=']
  */
 const WITHIN_MS = 10_000
 
+/**
+ * How long a call that talks to a remote may take.
+ *
+ * Longer than the local one, because a push of a few megabytes over a slow
+ * link is not a fault, and shorter than forever for the reason a local call
+ * has one: a `push` that has stopped to wait — on a remote that accepted the
+ * connection and went quiet, on a proxy, on a prompt that `strippedEnv` did
+ * not manage to turn off — is a pane that says "pushing" until somebody
+ * reloads it. Sixty seconds is long enough for any push a project this size
+ * makes and short enough that a person still remembers what they pressed.
+ *
+ * When it fires the whole process group is killed, not just git: a push runs
+ * `ssh` or `git-remote-https` as a child of its own, and killing git alone
+ * would leave that child holding the connection open with nobody reading it.
+ */
+const NETWORK_WITHIN_MS = 60_000
+
+/** The subcommand in an argument array, skipping `-c key=value` pairs the way `vetted` does. */
+function subcommandOf(args: string[]): string {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index] ?? ''
+    if (arg === '-c') {
+      index += 1
+      continue
+    }
+    if (!arg.startsWith('-')) return arg
+  }
+  return ''
+}
+
+/** How long one call may take: sixty seconds when it reaches a remote, ten when it does not. */
+export function within(args: string[]): number {
+  return NETWORK.has(subcommandOf(args)) ? NETWORK_WITHIN_MS : WITHIN_MS
+}
+
 /** How much of git's output is kept. Bounded, because `git log` on a large repository is not. */
 const MAX_OUTPUT = 4_000_000
 
-export const spawnGit: GitRunner = (args, options) =>
-  new Promise((settle) => {
-    const check = vetted(args)
-    if (!check.ok) {
-      settle({ ok: false, code: -1, out: '', err: check.why })
-      return
-    }
-    let out = ''
-    let err = ''
-    let done = false
-    const finish = (result: GitResult) => {
-      if (done) return
-      done = true
-      settle(result)
-    }
-    try {
-      const child = spawn('git', [...PREFIX, ...args], {
-        cwd: options.cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        shell: false,
-        /*
-         * A deliberately narrow environment.
-         *
-         * `GIT_CONFIG_NOSYSTEM` and an empty `HOME` would go too far — this
-         * module WANTS the person's `user.name` and `user.email`, so that a
-         * commit it makes is theirs rather than anonymous. What is stripped is
-         * the set of variables that make git do something other than what the
-         * arguments say: an editor it would open and wait on, a pager, a
-         * credential helper, and the `GIT_DIR`/`GIT_WORK_TREE` pair that would
-         * silently redirect every call in this module at a different repository.
-         */
-        env: strippedEnv(),
-      })
-      const timer = setTimeout(() => {
-        child.kill('SIGKILL')
-        finish({
-          ok: false,
-          code: -1,
-          out,
-          err: `\`git ${args[0]}\` did not finish within ${Math.round(WITHIN_MS / 1000)} seconds and was stopped. The commonest cause is another program holding this repository’s index.lock.`,
+/**
+ * A runner, with the timeout as a parameter.
+ *
+ * `spawnGit` below is the one everything uses, with the two timeouts above.
+ * The parameter exists so that `test/run.test.ts` can prove the timeout is a
+ * real one — a git call stopped mid-wait, its child killed, a sentence back —
+ * against a loopback server that never answers, in a few hundred milliseconds
+ * rather than sixty seconds.
+ */
+export function gitRunner(options: { within?: (args: string[]) => number } = {}): GitRunner {
+  const limit = options.within ?? within
+  return (args, where) =>
+    new Promise((settle) => {
+      const check = vetted(args)
+      if (!check.ok) {
+        settle({ ok: false, code: -1, out: '', err: check.why })
+        return
+      }
+      const subcommand = subcommandOf(args)
+      const network = NETWORK.has(subcommand)
+      const allowed = limit(args)
+      let out = ''
+      let err = ''
+      let done = false
+      const finish = (result: GitResult) => {
+        if (done) return
+        done = true
+        settle(result)
+      }
+      try {
+        const child = spawn('git', [...PREFIX, ...args], {
+          cwd: where.cwd,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          shell: false,
+          /*
+           * A network call gets a session of its own, and that is a third
+           * defence against a prompt rather than tidiness. `ssh` does not read
+           * a passphrase from stdin — it opens `/dev/tty` directly, which is
+           * the controlling terminal of the process's SESSION. A dev server
+           * started from a terminal has one, and an `ssh` two processes below
+           * it would find it and ask there, in a window nobody is looking at,
+           * while the pane waits. `detached: true` starts git in a new session
+           * with no controlling terminal, so there is nothing to open.
+           *
+           * It also makes git the leader of a process group, which is what
+           * lets the timeout kill git AND the `ssh` or `git-remote-https` it
+           * started, by signalling the group rather than the one pid.
+           */
+          detached: network,
+          /*
+           * A deliberately narrow environment.
+           *
+           * `GIT_CONFIG_NOSYSTEM` and an empty `HOME` would go too far — this
+           * module WANTS the person's `user.name` and `user.email`, so that a
+           * commit it makes is theirs rather than anonymous. What is stripped is
+           * the set of variables that make git do something other than what the
+           * arguments say: an editor it would open and wait on, a pager, a
+           * credential helper, and the `GIT_DIR`/`GIT_WORK_TREE` pair that would
+           * silently redirect every call in this module at a different repository.
+           */
+          env: strippedEnv(),
         })
-      }, WITHIN_MS)
-      child.stdout.on('data', (chunk: Buffer) => {
-        if (out.length < MAX_OUTPUT) out += chunk.toString()
-      })
-      child.stderr.on('data', (chunk: Buffer) => {
-        if (err.length < MAX_OUTPUT) err += chunk.toString()
-      })
-      child.on('error', (error) => {
-        clearTimeout(timer)
-        finish({ ok: false, code: -1, out, err: `git could not be run: ${error.message}` })
-      })
-      child.on('close', (code) => {
-        clearTimeout(timer)
-        finish({ ok: code === 0, code: code ?? -1, out, err })
-      })
-    } catch (error) {
-      finish({ ok: false, code: -1, out: '', err: (error as Error).message })
-    }
-  })
+        const stop = () => {
+          try {
+            if (network && child.pid) process.kill(-child.pid, 'SIGKILL')
+            else child.kill('SIGKILL')
+          } catch {
+            /* Already gone, which is the outcome wanted. */
+          }
+        }
+        const timer = setTimeout(() => {
+          stop()
+          finish({
+            ok: false,
+            code: -1,
+            out,
+            err: network
+              ? `\`git ${subcommand}\` did not finish within ${Math.round(allowed / 1000)} seconds and was stopped. `
+                + 'Either the remote did not answer, or something on the way to it was waiting for an answer this pane '
+                + 'cannot type — a password, a passphrase, a yes to a new host key. Nothing was changed here. Try the '
+                + 'same command in a terminal, where it can ask.'
+              : `\`git ${subcommand}\` did not finish within ${Math.round(allowed / 1000)} seconds and was stopped. The commonest cause is another program holding this repository’s index.lock.`,
+          })
+        }, allowed)
+        child.stdout.on('data', (chunk: Buffer) => {
+          if (out.length < MAX_OUTPUT) out += chunk.toString()
+        })
+        child.stderr.on('data', (chunk: Buffer) => {
+          if (err.length < MAX_OUTPUT) err += chunk.toString()
+        })
+        child.on('error', (error) => {
+          clearTimeout(timer)
+          finish({ ok: false, code: -1, out, err: `git could not be run: ${error.message}` })
+        })
+        child.on('close', (code) => {
+          clearTimeout(timer)
+          finish({ ok: code === 0, code: code ?? -1, out, err })
+        })
+      } catch (error) {
+        finish({ ok: false, code: -1, out: '', err: (error as Error).message })
+      }
+    })
+}
+
+export const spawnGit: GitRunner = gitRunner()
 
 /** The variables that would make git do something other than what the arguments say. */
 const STRIP = [
@@ -315,19 +496,59 @@ const STRIP = [
   'GIT_SSH',
   'GIT_SSH_COMMAND',
   'GIT_ASKPASS',
+  'SSH_ASKPASS',
   'GIT_CONFIG',
   'GIT_CONFIG_GLOBAL',
   'GIT_CONFIG_SYSTEM',
   'GIT_ALLOW_PROTOCOL',
 ]
 
+/**
+ * The environment git runs in, and the four things in it that stop a prompt.
+ *
+ * ## A prompt is the worst failure available to a network call
+ *
+ * `git push` over HTTPS with no cached credential asks for a username on the
+ * terminal. Over SSH with a passphrase-protected key, `ssh` asks for the
+ * passphrase. On a host it has not seen, `ssh` asks whether to trust it. Every
+ * one of those is a process stopped, waiting for a keypress, on a terminal that
+ * this module does not have — and behind it an HTTP request from the page that
+ * will not be answered until the timeout kills the wait. Sixty seconds of a
+ * pane saying "pushing", and then a sentence about a timeout, is exactly the
+ * wrong report for "you have not told git your password".
+ *
+ * So every way git and ssh have of asking is turned off, and the call FAILS,
+ * at once, with git's own sentence — `could not read Username: terminal prompts
+ * disabled`, `Permission denied (publickey)`, `Host key verification failed` —
+ * which `remote.ts` then puts one line of advice in front of: do it once in a
+ * terminal, where it can ask, and the credential helper will remember.
+ *
+ * - `GIT_TERMINAL_PROMPT=0`: git's own prompts, for HTTP credentials.
+ * - `GIT_ASKPASS` and `SSH_ASKPASS` stripped, `SSH_ASKPASS_REQUIRE=never`: the
+ *   graphical fallbacks. A dialog would not hang the terminal, but it would
+ *   appear somewhere on the screen with no connection to the pane that caused
+ *   it, and the pane would wait on it just the same. `core.askPass` in
+ *   somebody's config is the one route left, and it is theirs to have set.
+ * - `GIT_SSH_COMMAND=ssh -o BatchMode=yes`: ssh's prompts. `BatchMode` makes
+ *   every question a refusal — no passphrase, no host-key yes/no — and leaves
+ *   `~/.ssh/config`, which is where a person's keys and hosts actually live,
+ *   fully in force. A `core.sshCommand` in git config is overridden by this,
+ *   and that is a real trade stated plainly: a wrapper somebody configured
+ *   there does not run from this pane, because this pane cannot know whether
+ *   the wrapper asks.
+ *
+ * The credential helper itself is untouched. `osxkeychain`, `manager`, `store`
+ * — whatever answers without asking, still answers, which is why a push from
+ * here works at all on a machine where a push from a terminal has worked once.
+ * `test/run.test.ts` proves the HTTP half against a loopback server that asks
+ * for a password: git gives up in well under a second and says why.
+ */
 export function strippedEnv(from: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...from }
   for (const name of STRIP) delete env[name]
-  /* Nothing here ever wants an interactive prompt: a git call that stopped to
-     ask for a passphrase would hang until the timeout above killed it, and the
-     person would see ten seconds of nothing rather than a refusal. */
   env.GIT_TERMINAL_PROMPT = '0'
   env.GIT_OPTIONAL_LOCKS = '0'
+  env.SSH_ASKPASS_REQUIRE = 'never'
+  env.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes'
   return env
 }

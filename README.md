@@ -201,11 +201,11 @@ nothing this module can do about somebody typing it.
 
 So: **`git clean -xdff` in a project deletes its `.kehikot` history
 permanently.** Nothing in this module will ever run it — `clean` is not on the
-allowlist of subcommands this module will pass to git, along with `push`,
-`reset`, `rebase` and everything else that rewrites or discards — but a person
-with a terminal can. If that history matters, `git clone` the `.kehikot` folder
-somewhere, or push it to a remote yourself. This module has no network path and
-will not do it for you.
+allowlist of subcommands this module will pass to git, along with `reset`,
+`rebase` and everything else that rewrites or discards — but a person with a
+terminal can. If that history matters, give the `.kehikot` repository a remote
+(`git remote add` in a terminal; this module does not edit remotes) and the
+push button on its branch row sends it there.
 
 ---
 
@@ -318,12 +318,38 @@ derived folder says so in its own `.gitignore`, and git is what reads it.
 This is a real git client in a 220-pixel pane, so the guards are the design
 rather than a disclaimer.
 
-**There is an allowlist of subcommands, and it is short.** `push`, `reset`,
-`clean`, `rebase`, `filter-branch`, `gc`, `remote`, `fetch`, `pull` and `clone`
-are not on it, and neither are the flags `--amend`, `--hard` and `--force`. This
-module has **no network path at all**, which is a stronger guarantee than a
-careful `push` would be and needs no care to keep. Nothing here can rewrite
+**There is an allowlist of subcommands, and it is short.** `reset`, `clean`,
+`rebase`, `filter-branch`, `gc`, `remote`, `fetch` and `clone` are not on it, and
+neither are the flags `--amend`, `--hard`, `--force`, `--force-with-lease`,
+`--mirror`, `--delete`, `--prune`, `--rebase`, `--exec`, `--upload-pack` and
+`--receive-pack`, in either spelling git accepts. Nothing here can rewrite
 history that already exists.
+
+**`push` and `pull` ARE on it, and only ever forward.** This module used to
+have no network path at all, and said so as a guarantee stronger than a careful
+push. That was traded for two buttons on the branch row, and what replaced it
+is narrower and stated in full in `git/run.ts`: a push from here can only
+fast-forward a remote branch — every flag and every refspec spelling that
+forces or deletes is refused, and a push the remote cannot fast-forward comes
+back as "somebody pushed first, pull" rather than as a fault; a pull from here
+is `--ff-only`, so it either moves the branch cleanly onto what was fetched or
+refuses and changes nothing, because a half-done merge is a state this pane
+cannot draw or get out of — that belongs in a terminal, and the refusal says
+so. No `pre-push` of yours is skipped in your own repository. And nothing here
+can wait on a prompt: every way git and ssh have of asking for a password, a
+passphrase or a host key is turned off, so a missing credential is a sentence
+in under a second rather than a pane that says "pushing" until it times out.
+
+The buttons say what they will do before you press. `push 3` is three commits
+the remote-tracking ref does not have — local knowledge, and current. `pull 1`
+is one commit behind **as of the last fetch**, which the tooltip says in so
+many words, and the pull button is never greyed for "nothing to pull" because
+that would be a claim about a server this machine has not asked. Push is grey
+with a reason when there is nothing to push, no remote, no upstream and no
+clear remote to publish to, or HEAD is detached; pull is grey when there is
+no remote, no upstream, HEAD is detached, or anything is uncommitted — the
+same rule that freezes the branch select. A branch with no upstream gets a
+**publish** button instead: a first push that also sets the upstream.
 
 **A checkout over uncommitted work is refused, not warned about.** The brief said
 to at least say that uncommitted changes exist. A warning is not something a

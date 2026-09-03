@@ -3,6 +3,7 @@ import type { Standing } from '../../git/committer.ts'
 import type { Stance } from '../../git/enclosing.ts'
 import type { At, Branch, Commit, Dirty, Head, Kind, Reading } from '../../git/repo.ts'
 import type { Which } from '../../git/names.ts'
+import type { Tracking } from '../../git/remote.ts'
 
 /**
  * Talking to this app's own server, which is the same origin this page came
@@ -31,7 +32,7 @@ import type { Which } from '../../git/names.ts'
  * page that loads and never answers the host's greeting.
  */
 
-export type { At, Both, Branch, Commit, Dirty, Head, Kind, Reading, Stance, Standing, Which }
+export type { At, Both, Branch, Commit, Dirty, Head, Kind, Reading, Stance, Standing, Tracking, Which }
 
 /**
  * The ticket, read once off the inert JSON island the document carries.
@@ -167,6 +168,16 @@ function pathsOf(entries: Dirty[]): string[] {
     if (entry.from) paths.push(entry.from)
   }
   return paths
+}
+
+/** Push the current branch forward to where git says it goes. A first push sets the upstream; see `push` in `git/remote.ts`. */
+export function push(projectPath: string, which: Which): Promise<Said> {
+  return post('/api/push', { project: projectPath, which })
+}
+
+/** Bring the upstream in, fast-forward only. Refused over uncommitted work; see `pull` in `git/remote.ts`. */
+export function pull(projectPath: string, which: Which): Promise<Said> {
+  return post('/api/pull', { project: projectPath, which })
 }
 
 /** One commit in full. */
