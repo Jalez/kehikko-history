@@ -501,7 +501,37 @@ const STRIP = [
   'GIT_CONFIG_GLOBAL',
   'GIT_CONFIG_SYSTEM',
   'GIT_ALLOW_PROTOCOL',
+  /*
+   * The three below are `-c` spelled as an environment variable, and they were
+   * missing from this list while every other way of setting config was on it.
+   *
+   * `git -c key=value` is limited to three keys by `VETTED_C`, because config
+   * is where the dangerous settings live: `core.sshCommand` and
+   * `credential.helper` name a program to run, `core.hooksPath` names a
+   * directory of them, `protocol.ext.allow` opens a transport that executes a
+   * command out of a URL. That allowlist was doing its job on the command line
+   * and nothing was doing it here — git reads `GIT_CONFIG_PARAMETERS`, and the
+   * `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_<n>` / `GIT_CONFIG_VALUE_<n>` trio,
+   * with exactly the force of `-c`, and neither was stripped.
+   *
+   * It is a smaller hole than the argument checks guard, and worth saying why
+   * rather than overstating it: nothing on the wire reaches this environment,
+   * so setting one of these means already being inside the process that spawns
+   * git. But this list exists precisely because a module should not inherit
+   * whatever it happens to be launched with, and it named `GIT_CONFIG_GLOBAL`
+   * on that reasoning already. Leaving the equivalent unstripped made the
+   * allowlist above true of one spelling and not the other.
+   *
+   * The numbered form is a family rather than a name — `GIT_CONFIG_KEY_0`,
+   * `_1`, and so on — so `strippedEnv` drops it by PREFIX. A fixed list would
+   * have covered as many as somebody remembered to write down.
+   */
+  'GIT_CONFIG_PARAMETERS',
+  'GIT_CONFIG_COUNT',
 ]
+
+/** Stripped by prefix, because these are numbered without limit. See `STRIP`. */
+const STRIP_PREFIXES = ['GIT_CONFIG_KEY_', 'GIT_CONFIG_VALUE_']
 
 /**
  * The environment git runs in, and the four things in it that stop a prompt.
@@ -546,6 +576,9 @@ const STRIP = [
 export function strippedEnv(from: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...from }
   for (const name of STRIP) delete env[name]
+  for (const name of Object.keys(env)) {
+    if (STRIP_PREFIXES.some((prefix) => name.startsWith(prefix))) delete env[name]
+  }
   env.GIT_TERMINAL_PROMPT = '0'
   env.GIT_OPTIONAL_LOCKS = '0'
   env.SSH_ASKPASS_REQUIRE = 'never'

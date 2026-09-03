@@ -128,3 +128,30 @@ describe('a remote that never answers is given up on, and the child is killed', 
     expect(within(['log'])).toBe(10_000)
   })
 })
+
+/*
+ * Config given as an environment variable is `-c` by another spelling, and the
+ * allowlist that vets `-c` only ever read the command line. One test per
+ * family, and the numbered pair is checked at two different indices, because
+ * those are stripped by PREFIX — a test written against a fixed list would
+ * pass against the same fixed list and prove nothing about the seventh key.
+ */
+test('strippedEnv drops config passed as an environment variable', () => {
+  const env = strippedEnv({
+    PATH: '/usr/bin',
+    GIT_CONFIG_PARAMETERS: "'core.sshCommand=touch /tmp/pwned'",
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'credential.helper',
+    GIT_CONFIG_VALUE_0: '!sh -c "echo pwned"',
+    GIT_CONFIG_KEY_7: 'core.hooksPath',
+    GIT_CONFIG_VALUE_7: '/tmp/hooks',
+  })
+  expect(env.GIT_CONFIG_PARAMETERS).toBeUndefined()
+  expect(env.GIT_CONFIG_COUNT).toBeUndefined()
+  expect(env.GIT_CONFIG_KEY_0).toBeUndefined()
+  expect(env.GIT_CONFIG_VALUE_0).toBeUndefined()
+  expect(env.GIT_CONFIG_KEY_7).toBeUndefined()
+  expect(env.GIT_CONFIG_VALUE_7).toBeUndefined()
+  /* Everything else the process was launched with still reaches git. */
+  expect(env.PATH).toBe('/usr/bin')
+})
