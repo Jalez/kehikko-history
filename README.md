@@ -347,9 +347,24 @@ many words, and the pull button is never greyed for "nothing to pull" because
 that would be a claim about a server this machine has not asked. Push is grey
 with a reason when there is nothing to push, no remote, no upstream and no
 clear remote to publish to, or HEAD is detached; pull is grey when there is
-no remote, no upstream, HEAD is detached, or anything is uncommitted — the
-same rule that freezes the branch select. A branch with no upstream gets a
+no remote, no upstream, or HEAD is detached. A branch with no upstream gets a
 **publish** button instead: a first push that also sets the upstream.
+
+**Uncommitted work is a caveat on pull, not a bar to it.** It used to grey the
+button, by the rule that freezes the branch select. That was wrong twice over.
+Something is uncommitted on a working project nearly all the time — the modules
+write to `.kehikot` as you use them — so pull was not occasionally off, it was
+off, including on the one screen that tells you to press it: the refusal of a
+push the remote rejected, whose advice is "pull to bring their commits in, then
+push again". And a fast-forward is not a checkout of the whole tree. Git refuses
+one exactly when it would write over a file you have edited, it names that file,
+and it refuses the whole pull, so there is no half-done state to be got into.
+So git decides. The tooltip carries the caveat, and the refusal names the files.
+
+**Every answer this pane gives can be dismissed.** The green box and the red one
+carry a × . They used to be cleared only by the next press, which on a refusal
+whose advice you could not follow meant four lines of red pinned above the
+branch row with nothing to do about it.
 
 **A checkout over uncommitted work is refused, not warned about.** The brief said
 to at least say that uncommitted changes exist. A warning is not something a

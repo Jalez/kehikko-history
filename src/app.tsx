@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { ID } from '../manifest.ts'
 
+import { Button } from '@/components/ui/button.tsx'
 import * as ask from '@/store/ask.ts'
 import type { Both, Said, Standing, Which } from '@/store/ask.ts'
 import { useRoadmap, type GotoHandler } from '@/wire/use-roadmap.ts'
@@ -72,6 +74,60 @@ const framed = typeof window !== 'undefined' && window.parent !== window
  * the same thing.
  */
 const REREAD_MS = 4000
+
+/**
+ * What a press answered, and the press that takes it off the screen.
+ *
+ * ## An answer that cannot be dismissed outlives its question
+ *
+ * These boxes were written once and cleared once: `act` blanks them at the
+ * start of the NEXT press. That is fine for a pane somebody is working through
+ * and wrong for the pane as it is actually used. A push refused by the remote
+ * leaves four lines of red pinned above the branch row of a 340-pixel pane,
+ * and the only way to be rid of it was to press something else. On the refusal
+ * whose own advice is "pull to bring their commits in, then push again" —
+ * and pull was, until this commit, grey over any uncommitted file — there was
+ * no something else to press. The reader was told to do a thing they could not
+ * do, by a box they could not close.
+ *
+ * The dismiss is a press and not a timer. These sentences are long on purpose
+ * and most of them end in an instruction; a box that took itself away after
+ * five seconds is one a person is still reading when it goes.
+ *
+ * ## The blank line in a refusal is a blank line
+ *
+ * `saidBy` in `git/remote.ts` puts one line of advice, a blank line, and then
+ * git's own words. Drawn in a plain `<p>` that collapses to a single space,
+ * so `…then push again. git said: To github.com:…` ran together as one
+ * paragraph and the seam between this pane talking and git talking — the whole
+ * point of composing it that way — was invisible. `whitespace-pre-line` keeps
+ * the newlines and still wraps the long lines, which is what these are: prose
+ * with deliberate breaks, not preformatted text.
+ */
+export function Banner({ kind, children, onClose }: { kind: 'done' | 'failed'; children: ReactNode; onClose: () => void }) {
+  const tone =
+    kind === 'done' ? 'border-done/40 bg-done/5 text-done' : 'border-failed/40 bg-failed/5 text-failed'
+  return (
+    <div
+      data-banner={kind}
+      className={`flex min-w-0 items-start gap-1 rounded border px-2 py-1.5 text-[0.65rem] leading-4 ${tone}`}
+    >
+      <div className="min-w-0 flex-1">{children}</div>
+      <Button
+        type="button"
+        size="paneIcon"
+        variant="ghost"
+        aria-label="Dismiss"
+        title="Dismiss"
+        data-dismiss={kind}
+        className="-mr-1 -mt-0.5 size-4 shrink-0 text-current opacity-70 hover:bg-transparent hover:opacity-100"
+        onClick={onClose}
+      >
+        <X aria-hidden="true" className="size-3" />
+      </Button>
+    </div>
+  )
+}
 
 export function App() {
   const [both, setBoth] = useState<Both | null>(null)
@@ -323,12 +379,20 @@ export function App() {
       ) : null}
 
       {said ? (
-        <p className="rounded border border-done/40 bg-done/5 px-2 py-1.5 text-[0.65rem] leading-4 text-done">{said}</p>
+        <Banner kind="done" onClose={() => setSaid(null)}>
+          <p className="min-w-0 whitespace-pre-line [overflow-wrap:anywhere]">{said}</p>
+        </Banner>
       ) : null}
 
       {trouble ? (
-        <div className="rounded border border-failed/40 bg-failed/5 px-2 py-1.5 text-[0.65rem] leading-4 text-failed">
-          <p className="min-w-0 [overflow-wrap:anywhere]">{trouble}</p>
+        <Banner
+          kind="failed"
+          onClose={() => {
+            setTrouble(null)
+            setWouldLose([])
+          }}
+        >
+          <p className="min-w-0 whitespace-pre-line [overflow-wrap:anywhere]">{trouble}</p>
           {wouldLose.length ? (
             <ul className="mt-1 flex min-w-0 flex-col gap-0.5">
               {wouldLose.map((path) => (
@@ -338,7 +402,7 @@ export function App() {
               ))}
             </ul>
           ) : null}
-        </div>
+        </Banner>
       ) : null}
 
       {screen}

@@ -116,13 +116,28 @@ describe('pull', () => {
     expect(freshness(null, NOW)).toContain('not known')
   })
 
-  test('uncommitted changes freeze pull with the same shape of sentence as the branch select', () => {
+  test('uncommitted changes are a caveat on pull rather than a refusal of it', () => {
     const control = pullControl(reading({ dirty: [{ code: ' M', path: 'a', kind: 'modified', from: null }] }, { behind: 1 }), NOW)
-    expect(control.on).toBe(false)
-    expect(control.why).toBe('dirty')
+    expect(control.on).toBe(true)
+    expect(control.why).toBe('none')
     expect(control.count).toBe(1)
-    expect(control.reason).toContain('off while 1 change is uncommitted')
-    expect(control.reason).toContain('Uncommitted tab')
+    expect(control.reason).toContain('1 file has uncommitted changes')
+    expect(control.reason).toContain('refuses the whole pull and changes nothing')
+  })
+
+  test('the caveat counts the files, and is absent on a clean tree', () => {
+    const two = pullControl(
+      reading({
+        dirty: [
+          { code: ' M', path: 'a', kind: 'modified', from: null },
+          { code: '??', path: 'b', kind: 'untracked', from: null },
+        ],
+      }),
+      NOW,
+    )
+    expect(two.on).toBe(true)
+    expect(two.reason).toContain('2 files have uncommitted changes')
+    expect(pullControl(reading(), NOW).reason).not.toContain('uncommitted')
   })
 
   test('no upstream is grey and says push sets one; no remote and detached say theirs', () => {

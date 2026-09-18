@@ -227,13 +227,33 @@ describe('what git is asked to pull, and how the answer is said', () => {
     expect(done.said).toContain('already up to date with origin/main')
   })
 
-  test('uncommitted work is refused before git, naming the files, as a checkout is', async () => {
+  test('uncommitted work no longer stops the press: git is asked, and answers', async () => {
     const { run, calls } = fakeGit(clean({ status: { ok: true, out: ' M a.txt\0?? b/\0' } }))
     const done = await pull('/r', run, false)
+    expect(done.ok).toBe(true)
+    expect(calls.some((args) => args.includes('pull'))).toBe(true)
+  })
+
+  test('git refusing over local changes names them, and says nothing moved', async () => {
+    const { run } = fakeGit(
+      clean({
+        pull: {
+          ok: false,
+          code: 1,
+          err:
+            'error: Your local changes to the following files would be overwritten by merge:\n'
+            + '\ta.txt\n\tnotes/b.json\n'
+            + 'Please commit your changes or stash them before you merge.\nAborting',
+        },
+      }),
+    )
+    const done = await pull('/r', run, false)
     expect(done.ok).toBe(false)
-    expect(done.said).toContain('not committed, so nothing was pulled')
-    expect(done.wouldLose).toEqual(['a.txt', 'b/'])
-    expect(calls.some((args) => args.includes('pull'))).toBe(false)
+    expect(done.said).toContain('written over work here that is not committed')
+    expect(done.said).toContain('nothing changed')
+    expect(done.said).toContain('count beside pull is now current')
+    expect(done.said).toContain('git said: error: Your local changes')
+    expect(done.wouldLose).toEqual(['a.txt', 'notes/b.json'])
   })
 
   test('no upstream is refused before git, and says push sets one', async () => {
