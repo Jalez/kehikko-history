@@ -2,7 +2,7 @@
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { originFor, registerAt } from 'roadmap-module-protocol/serve'
+import { originFor, registerAt } from 'kehikot-module-protocol/serve'
 
 import { ID, PREFERRED_PORT } from './manifest.ts'
 
@@ -39,7 +39,7 @@ import { ID, PREFERRED_PORT } from './manifest.ts'
  *
  * The registry directory, the rule that the FILENAME carries the id, the shape
  * of the document, and the argument for each are in
- * `roadmap-module-protocol/serve` now — imported by this and by every other
+ * `kehikot-module-protocol/serve` now — imported by this and by every other
  * module rather than copied into fourteen repositories where one of them will
  * eventually disagree by a character. Writing to the wrong directory is the
  * worst failure a module can have, because the host finds nothing and finds it

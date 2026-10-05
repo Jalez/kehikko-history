@@ -9,7 +9,7 @@
 #   - No port, and no `--strictPort`. Both used to be here, and the number 7960
 #     was written twice — once on this line and once in `register.ts` — which is
 #     why moving a module meant editing two files and then remembering that the
-#     file in `~/.roadmap/modules` still named the old address. It is now stated
+#     file in `~/Library/Application Support/Kehikot/modules` still named the old address. It is now stated
 #     once, in `vite.config.ts`, beside the id: `serves({ id: ID, prefer: 7960 })`.
 #     $PORT is still honoured, because a host that starts this passes the port
 #     from the registration and the module should prefer the address the host is
@@ -31,7 +31,7 @@
 # ## Nothing here says which project, and that is the whole shape of this module
 #
 # There is no variable to export. The two repositories this app shows are found
-# from `projectPath`, which arrives in `roadmap.context` from whichever host
+# from `projectPath`, which arrives in `kehikot.context` from whichever host
 # framed the page — this script cannot know which project that will be, and a
 # script that exported a default would be handing this app a folder to run `git
 # init` in that nobody chose. See `git/repo.ts`: a silently wrong location is
@@ -66,9 +66,25 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-if [ ! -d node_modules ]; then
+# Install when nothing is installed, AND whenever bun.lock or package.json is
+# newer than the last install here — the same rule as the host's own run.sh. A
+# pull that moves the protocol pin leaves the old package in node_modules, and
+# a page that imports a name the old package does not have draws nothing.
+# `--frozen-lockfile`, so a start installs exactly what bun.lock says and never
+# rewrites it behind somebody's back. The stamp is written only after an
+# install that succeeded.
+INSTALLED=node_modules/.kehikot-installed
+VITE_FORCE=
+if [ ! -d node_modules ] || [ ! -f "$INSTALLED" ] || [ bun.lock -nt "$INSTALLED" ] || [ package.json -nt "$INSTALLED" ]; then
   echo "installing…" >&2
-  bun install >&2
+  if [ -f bun.lock ]; then
+    bun install --frozen-lockfile >&2 || { echo "bun install --frozen-lockfile failed: bun.lock does not match package.json. Run \`bun install\` and commit bun.lock." >&2; exit 1; }
+  else
+    bun install >&2
+  fi
+  touch "$INSTALLED"
+  # Rebuild Vite's pre-bundle rather than trust one made from the old packages.
+  VITE_FORCE=--force
 fi
 
-exec bunx vite
+exec bunx vite $VITE_FORCE

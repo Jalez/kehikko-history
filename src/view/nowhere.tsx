@@ -4,7 +4,7 @@
  * ## Why this screen exists at all
  *
  * Both of the histories this module shows are found from
- * `roadmap.context.projectPath`, which is nullable and is null in two perfectly
+ * `kehikot.context.projectPath`, which is nullable and is null in two perfectly
  * ordinary situations: nothing is framing this page, or a host knows the
  * project's NAME and has no folder on this machine to point at.
  *

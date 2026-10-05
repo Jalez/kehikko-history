@@ -1,6 +1,6 @@
-import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-module-protocol'
+import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'kehikot-module-protocol'
 
-export const ID = 'roadmap.history'
+export const ID = 'kehikot.history'
 export const VERSION = '1.0.0'
 
 /**
@@ -9,7 +9,7 @@ export const VERSION = '1.0.0'
  *
  * It used to be written twice — `--port "${PORT:-7960}"` in `run.sh` and
  * `Number(process.env.PORT ?? 7960)` in `register.ts` — with nothing keeping the
- * two in step and a third copy of the number sitting in `~/.roadmap/modules`
+ * two in step and a third copy of the number sitting in `~/Library/Application Support/Kehikot/modules`
  * from the last time somebody ran the second. Moving a module was two edits and
  * a thing to remember.
  *
@@ -21,7 +21,7 @@ export const VERSION = '1.0.0'
  * It is a PREFERENCE and not a promise. 7820 through 7950 belong to the other
  * modules on this machine, and if something else has 7960 when this starts,
  * `serves()` moves to the next free port and rewrites the registration to match
- * — see `roadmap-module-protocol/serve`. The registry is what a host reads, so
+ * — see `kehikot-module-protocol/serve`. The registry is what a host reads, so
  * the registry is what has to be true; this number is only where to start
  * looking.
  */
@@ -68,7 +68,7 @@ export const PREFERRED_PORT = 7960
  * reasonably conclude the commits below it had moved too. They have not.
  *
  * The thing this module DOES follow is the project, and `projectPath` arrives in
- * `roadmap.context` for a global mode exactly as it does for an epic one. So
+ * `kehikot.context` for a global mode exactly as it does for an epic one. So
  * nothing is lost by declining the epic: switching project still repaints, which
  * is the only switch that means anything here.
  *

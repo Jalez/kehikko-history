@@ -3,7 +3,7 @@
  * document really is at each — and whether anything is drawn on top of
  * anything else, which the width cannot say.
  *
- *     ROADMAP_MODULES_DIR=/tmp/scratch PORT=7999 bunx vite &
+ *     KEHIKOT_MODULES_DIR=/tmp/scratch PORT=7999 bunx vite &
  *     PROJECT=/tmp/scratch/project node dev/small.drive.mjs http://127.0.0.1:7999/app out/
  *
  * ## Why this is a driver and not a test
@@ -50,8 +50,8 @@
  * ## Run it against a scratch registry
  *
  * Starting this module's dev server REWRITES
- * `~/.roadmap/modules/roadmap.history.json` to the port and directory it bound
- * — that is what `serves()` is for. Set `ROADMAP_MODULES_DIR` before starting
+ * `~/Library/Application Support/Kehikot/modules/kehikot.history.json` to the port and directory it bound
+ * — that is what `serves()` is for. Set `KEHIKOT_MODULES_DIR` before starting
  * the server this points at, or the user's live registration is pointed at a
  * worktree. That has happened.
  */
@@ -159,7 +159,7 @@ for (const width of WIDTHS) {
   await page.evaluate((projectPath) => {
     window.postMessage(
       {
-        type: 'roadmap.hello',
+        type: 'kehikot.hello',
         protocol: 2,
         session: 'small-drive',
         context: { projectPath, project: 'scratch', theme: 'light' },
