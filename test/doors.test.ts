@@ -58,7 +58,7 @@ describe('the manifest and the health check', () => {
     const { run } = fakeGit()
     const reply = await answer('GET', '/healthz', new URLSearchParams(), null, null, run)
     expect(reply?.status).toBe(200)
-    expect((reply?.body as { id: string }).id).toBe('roadmap.history')
+    expect((reply?.body as { id: string }).id).toBe('kehikot.history')
   })
 
   test('a path this module does not own is handed back to Vite', async () => {
@@ -115,7 +115,7 @@ describe('the MCP door has the shape the other modules have', () => {
     const { run } = fakeGit()
     const reply = await answer('POST', '/mcp', new URLSearchParams(), { jsonrpc: '2.0', id: 1, method: 'initialize' }, null, run)
     const result = (reply?.body as { result: { serverInfo: { name: string }; instructions: string } }).result
-    expect(result.serverInfo.name).toBe('roadmap.history')
+    expect(result.serverInfo.name).toBe('kehikot.history')
     expect(result.instructions).toContain('.kehikot')
   })
 

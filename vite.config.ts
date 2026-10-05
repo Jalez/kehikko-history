@@ -3,8 +3,8 @@ import { resolve } from 'node:path'
 
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { WELL_KNOWN } from 'roadmap-module-protocol'
-import { serves } from 'roadmap-module-protocol/serve'
+import { LEGACY_WELL_KNOWN, WELL_KNOWN, legacyManifest } from 'kehikot-module-protocol'
+import { frameAncestors, serves } from 'kehikot-module-protocol/serve'
 import { defineConfig, type Plugin } from 'vite'
 
 import { MANIFEST, TICKET, answer } from './doors.ts'
@@ -62,6 +62,9 @@ function doors(): Plugin {
         /* Spelled by the protocol package so that this app and every host cannot
            disagree about it by a character. */
         if (path === WELL_KNOWN) return send(200, MANIFEST)
+        /* The same manifest in the spelling a host from before the rename asks for,
+           so that host still finds this module. */
+        if (path === LEGACY_WELL_KNOWN) return send(200, legacyManifest(MANIFEST))
 
         if (path === '/app' || path === '/app/' || path === '/') {
           void server
@@ -75,10 +78,7 @@ function doors(): Plugin {
               response.setHeader('cache-control', 'no-store')
               /* Framed by a host and by nothing else — and by nothing at all is
                  fine too, which is what opening this page directly is. */
-              response.setHeader(
-                'content-security-policy',
-                `frame-ancestors 'self' ${process.env.ROADMAP_ORIGIN ?? 'http://127.0.0.1:4181 http://localhost:4181'}`,
-              )
+              response.setHeader('content-security-policy', frameAncestors())
               response.end(html)
             })
             .catch(next)
@@ -169,7 +169,7 @@ async function body(request: IncomingMessage): Promise<Record<string, unknown> |
  * requests: no CORS is involved at all, and the ticket is unreadable from
  * anywhere but inside.
  *
- * ## No alias for `roadmap-module-protocol`
+ * ## No alias for `kehikot-module-protocol`
  *
  * There used to be one in every app here, pointing at the protocol's source. It
  * is gone and must not come back: the package's `exports` are correct, and a
@@ -185,7 +185,7 @@ async function body(request: IncomingMessage): Promise<Record<string, unknown> |
  * place once anything else took the port, because `--strictPort` meant the
  * module simply died. It is now `PREFERRED_PORT` in `manifest.ts`, stated once
  * beside the id it belongs with and read by both this file and `register.ts`.
- * See `roadmap-module-protocol/serve`: a free 7960 is taken silently, this
+ * See `kehikot-module-protocol/serve`: a free 7960 is taken silently, this
  * module already answering there is an exit rather than a second copy, and
  * anything else is a loud move to the next port with the registration rewritten
  * to wherever the server actually bound.
