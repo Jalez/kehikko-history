@@ -131,6 +131,8 @@ export const MANIFEST: Manifest = manifestSchema.parse({
   /* Bounded at 200 by the protocol, and the parse above is what says so — this
      line was 260 characters when it was first written, and the schema refused it
      at import rather than a host refusing it in somebody else's log. */
+  /* Where a host files this module in its list, most fitting first. */
+  tags: ['code'],
   summary:
     'A project’s git history as two tabs — what is committed and what is not, with commit and discard by file. '
     + 'The .kehikot data folder can be a repository of its own, made only when you press for one.',
