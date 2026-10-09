@@ -298,9 +298,7 @@ export function App() {
    * no project and comes back `nowhere`, which is not worth saying for 700 milliseconds.
    */
   const cover: CoverState | null =
-    server === 'stale'
-      ? 'stale'
-      : (coverFor({ where, projectPath }) ?? (server === 'down' ? 'down' : !both ? 'loading' : both.nowhere ? 'no-project' : null))
+    coverFor({ where, projectPath, server }) ?? (!both ? 'loading' : both.nowhere ? 'no-project' : null)
 
   const screen =
     both?.trouble ? (
