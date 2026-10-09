@@ -1,5 +1,7 @@
 import { existsSync } from 'node:fs'
 
+import { establishBuild, mintTicket, refuseTicket, type Reply } from 'kehikot-module-protocol/serve'
+
 import { ID, MANIFEST, VERSION } from './manifest.ts'
 
 /** Re-exported so `vite.config.ts` has one import for everything it serves. */
@@ -65,7 +67,10 @@ const NO_PROJECT =
   + 'was meant, because a guess here means running git in somebody’s repository they did not name.'
 
 /** The ticket a write has to carry. Minted per process, printed into `/app`, dies with this process. */
-export const TICKET = crypto.randomUUID()
+export const TICKET = mintTicket()
+
+/** What this process is built from and when it started; `doors()` says it wherever a build is said. */
+export const BUILD = establishBuild({ version: VERSION, dir: import.meta.dirname })
 
 const NO_TICKET =
   'that write did not carry this app’s ticket. The ticket is minted once per process and printed into the page this '
@@ -371,10 +376,7 @@ function readingText(reading: Reading): string {
   return lines.join('\n')
 }
 
-export interface Reply {
-  status: number
-  body: unknown
-}
+export type { Reply }
 
 const ok = (body: unknown): Reply => ({ status: 200, body })
 const bad = (why: string, status = 400): Reply => ({ status, body: { ok: false, error: why } })
@@ -506,7 +508,8 @@ export async function answer(
 
   /* Everything below writes, and every write carries the ticket. */
   if (path.startsWith('/api/') && method === 'POST') {
-    if (ticket !== TICKET) return bad(NO_TICKET, 403)
+    const refused = refuseTicket(ticket, TICKET, NO_TICKET)
+    if (refused) return refused
     const where = project(body?.project)
     if (!where) return bad(NO_PROJECT)
 

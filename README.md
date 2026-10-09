@@ -438,7 +438,6 @@ git/describe.ts    diffing JSON into a commit message
 git/committer.ts   the watcher, the debounce, and the one-committer lock
 
 src/               React 19, Tailwind v4 CSS-first, shadcn under components/ui
-page/document.ts   the page, generated, carrying the write ticket
 ```
 
 `scope: 'global'` is the odd one — every other module here is `epic`. An

@@ -1,3 +1,5 @@
+import { AskFailed, answered, ask } from 'kehikot-module-protocol/client'
+
 import type { Both } from '../../doors.ts'
 import type { Standing } from '../../git/committer.ts'
 import type { Stance } from '../../git/enclosing.ts'
@@ -34,48 +36,18 @@ import type { Tracking } from '../../git/remote.ts'
 
 export type { At, Both, Branch, Commit, Dirty, Head, Kind, Reading, Stance, Standing, Tracking, Which }
 
-/**
- * The ticket, read once off the inert JSON island the document carries.
- *
- * Read at module load rather than per request, because it cannot change while
- * this document is open: it is minted per server process and printed into the
- * page. A missing island is an empty string rather than a throw — that is a page
- * served by something other than this app's own server, which is a real state
- * during a build, and the writes will be refused with a sentence rather than the
- * page failing to render at all.
- */
-function ticket(): string {
-  const island = typeof document === 'undefined' ? null : document.getElementById('ticket')
-  if (!island?.textContent) return ''
-  try {
-    const parsed: unknown = JSON.parse(island.textContent)
-    return typeof parsed === 'string' ? parsed : ''
-  } catch {
-    return ''
-  }
-}
-
-const TICKET = ticket()
-
 export type Said = { ok: true; said: string } | { ok: false; error: string; wouldLose?: string[] }
 
+/**
+ * A write. The protocol's `ask` carries the page's ticket and turns every failure into a sentence:
+ * the server said no (its own words, and `wouldLose` beside them), the server did not answer, or
+ * this page is older than its server — in which case the page reloads itself a moment later.
+ */
 async function post(path: string, body: Record<string, unknown>): Promise<Said> {
-  try {
-    const response = await fetch(path, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-history-ticket': TICKET },
-      body: JSON.stringify(body),
-    })
-    const parsed = (await response.json()) as { ok?: unknown; said?: unknown; error?: unknown; wouldLose?: unknown }
-    if (parsed.ok === true) return { ok: true, said: typeof parsed.said === 'string' ? parsed.said : '' }
-    return {
-      ok: false,
-      error: typeof parsed.error === 'string' ? parsed.error : 'it did not work, and said nothing about why',
-      wouldLose: Array.isArray(parsed.wouldLose) ? (parsed.wouldLose as string[]) : undefined,
-    }
-  } catch {
-    return { ok: false, error: 'This app’s own server did not answer. It may have stopped; check the terminal it is running in.' }
-  }
+  const asked = await ask<{ said?: unknown }>(path, { body })
+  if (asked.ok) return { ok: true, said: typeof asked.body?.said === 'string' ? asked.body.said : '' }
+  const wouldLose = (asked.body as { wouldLose?: unknown } | null)?.wouldLose
+  return { ok: false, error: asked.error, wouldLose: Array.isArray(wouldLose) ? (wouldLose as string[]) : undefined }
 }
 
 /**
@@ -88,9 +60,7 @@ async function post(path: string, body: Record<string, unknown>): Promise<Said> 
  * to draw and nothing to do.
  */
 export async function histories(projectPath: string | null): Promise<Both> {
-  const query = projectPath ? `?project=${encodeURIComponent(projectPath)}` : ''
-  const response = await fetch(`/api/histories${query}`, { cache: 'no-store' })
-  return (await response.json()) as Both
+  return answered(await ask<Both>('/api/histories', { query: { project: projectPath || null } }))
 }
 
 export interface Started {
@@ -117,12 +87,12 @@ export interface Started {
  * somebody's project.
  */
 export async function start(projectPath: string, asked: boolean): Promise<Started> {
-  const response = await fetch('/api/watch', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-history-ticket': TICKET },
-    body: JSON.stringify({ project: projectPath, asked }),
-  })
-  return (await response.json()) as Started
+  const reply = await ask<Started>('/api/watch', { body: { project: projectPath, asked } })
+  if (reply.ok) return reply.body
+  /* "Not started, and why" is an answer of this door's own shape rather than a failure of the asking. */
+  const said = reply.body as Partial<Started> | null
+  if (reply.kind === 'refused' && said && typeof said === 'object' && 'standing' in said) return said as Started
+  throw new AskFailed(reply)
 }
 
 /** Move HEAD. Refused outright when anything is uncommitted; see `switchTo` in `git/repo.ts`. */

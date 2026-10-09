@@ -73,6 +73,8 @@ describe('every write carries the ticket', () => {
     const reply = await post('/api/commit', { project: '/tmp' }, run, null)
     expect(reply?.status).toBe(403)
     expect((reply?.body as { error: string }).error).toContain('reload the pane')
+    /* Marked, so the page's own `ask()` knows it is older than this server and reloads itself. */
+    expect((reply?.body as { refused: string }).refused).toBe('ticket')
     /* And nothing was run. A refusal that had already shelled out would be no
        refusal at all. */
     expect(calls).toHaveLength(0)

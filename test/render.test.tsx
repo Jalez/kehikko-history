@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 
-import { Banner } from '../src/app.tsx'
+import { resetServerStanding } from 'kehikot-module-protocol/client'
+
+import { App, Banner, KEPT } from '../src/app.tsx'
 import { Arm } from '../src/view/arm.tsx'
 import { History, Pick } from '../src/view/history.tsx'
-import { Nowhere } from '../src/view/nowhere.tsx'
 import type { Dirty, Reading } from '../git/repo.ts'
 
 /**
@@ -144,7 +145,6 @@ describe('a destructive press takes two, and there is no confirm() anywhere', ()
       'src/view/commits.tsx',
       'src/view/uncommitted.tsx',
       'src/app.tsx',
-      'src/view/nowhere.tsx',
     ]
     for (const file of files) {
       const source = require('node:fs').readFileSync(`${import.meta.dirname}/../${file}`, 'utf8') as string
@@ -907,19 +907,71 @@ describe('under 320 pixels the pane says the same things in fewer letters', () =
   })
 })
 
-describe('the screen for no project', () => {
-  test('unframed and hosted-without-a-path are two different sentences', () => {
-    const { unmount } = render(<Nowhere unhosted project={null} />)
-    expect(document.body.textContent).toContain('Nothing is framing this page')
-    unmount()
+describe('the not-ready moments, each as the one shared cover', () => {
+  const realFetch = globalThis.fetch
+  const nowhere = { nowhere: true, trouble: null, standing: null, project: null, kehikot: null, at: 'waiting', said: null, path: null }
+  let down = false
+  const greet = async (context: Record<string, unknown>) => {
+    await act(async () => {
+      window.postMessage({ type: 'kehikot.hello', protocol: 2, session: 's', state: null, context: { epic: null, theme: 'dark', ...context } }, '*')
+      await new Promise((resolve) => setTimeout(resolve, 30))
+    })
+  }
+  const cover = () => document.querySelector('[data-cover]')
+  const settle = (ms: number) => act(async () => void (await new Promise((resolve) => setTimeout(resolve, ms))))
 
-    render(<Nowhere unhosted={false} project="thesis_latex" />)
-    expect(document.body.textContent).toContain('“thesis_latex”')
-    expect(document.body.textContent).toContain('will not guess')
+  beforeEach(() => {
+    down = false
+    resetServerStanding()
+    globalThis.fetch = (async () => {
+      if (down) throw new TypeError('Load failed')
+      return new Response(JSON.stringify(nowhere), { status: 200 })
+    }) as unknown as typeof fetch
+  })
+  afterEach(() => {
+    globalThis.fetch = realFetch
+    document.documentElement.className = ''
   })
 
-  test('it offers nothing to press, because a picker here would be a guess', () => {
-    render(<Nowhere unhosted={false} project={null} />)
-    expect(screen.queryAllByRole('button')).toHaveLength(0)
+  test('before anything has greeted the page it is waiting — never "no project" — and then unhosted', async () => {
+    render(<App />)
+    await settle(30)
+    expect(cover()?.getAttribute('data-cover')).toBe('waiting')
+    expect(document.body.textContent).not.toContain('No project')
+    await settle(800)
+    expect(cover()?.getAttribute('data-cover')).toBe('unhosted')
+    expect(document.body.textContent).toContain('Nothing is framing this page')
+    /* It offers nothing to press, because a picker here would be a guess. */
+    expect(within(cover() as HTMLElement).queryAllByRole('button')).toHaveLength(0)
+  })
+
+  test('hosted with a name and no path: no project, and the detail says a name is not a path', async () => {
+    render(<App />)
+    await greet({ project: 'thesis_latex', projectPath: null })
+    expect(cover()?.getAttribute('data-cover')).toBe('no-project')
+    expect(document.body.textContent).toContain('“thesis_latex”')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+  })
+
+  test('its own server not answering says so, and Try again asks again', async () => {
+    down = true
+    render(<App />)
+    await greet({ project: 'p', projectPath: '/tmp/p' })
+    expect(cover()?.getAttribute('data-cover')).toBe('down')
+    expect(document.body.textContent).toContain('History’s own server is not answering.')
+    down = false
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+      await new Promise((resolve) => setTimeout(resolve, 30))
+    })
+    expect(cover()?.getAttribute('data-cover')).not.toBe('down')
+  })
+
+  test('the kept word is read strictly', () => {
+    expect(KEPT.read('project')).toBe('project')
+    expect(KEPT.read('kehikot')).toBe('kehikot')
+    expect(KEPT.read('something-older')).toBeNull()
+    expect(KEPT.read(null)).toBeNull()
+    expect(KEPT.write('project')).toBe('project')
   })
 })
