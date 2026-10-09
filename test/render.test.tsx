@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 
+import { Banner } from '../src/app.tsx'
 import { Arm } from '../src/view/arm.tsx'
 import { History, Pick } from '../src/view/history.tsx'
 import { Nowhere } from '../src/view/nowhere.tsx'
@@ -207,6 +208,36 @@ describe('the row above the tabs: branch and commit', () => {
   })
 })
 
+describe('an answer can be taken off the screen', () => {
+  test('the dismiss press clears the box, and the newlines in it survive', () => {
+    let closed = 0
+    render(
+      <Banner kind="failed" onClose={() => (closed += 1)}>
+        <p className="whitespace-pre-line">{'Pull to bring their commits in, then push again.\n\ngit said: ! [rejected]'}</p>
+      </Banner>,
+    )
+    const box = document.querySelector('[data-banner="failed"]')
+    expect(box).not.toBe(null)
+    /* The seam between this pane talking and git talking is a real newline in
+       the DOM, not a space — see the essay on `Banner`. */
+    expect(box?.textContent).toContain('push again.\n\ngit said:')
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(closed).toBe(1)
+  })
+
+  test('a success box carries the same press', () => {
+    let closed = 0
+    render(
+      <Banner kind="done" onClose={() => (closed += 1)}>
+        <p>Pushed 1 commit to origin/main.</p>
+      </Banner>,
+    )
+    expect(document.querySelector('[data-banner="done"]')).not.toBe(null)
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(closed).toBe(1)
+  })
+})
+
 describe('push and pull sit on the branch row, and say what they will do', () => {
   const tracking = (over: Partial<NonNullable<Reading['remote']>> = {}): Reading['remote'] => ({
     remotes: ['origin'],
@@ -283,11 +314,12 @@ describe('push and pull sit on the branch row, and say what they will do', () =>
     expect(document.getElementById('pull-off')?.textContent).toContain('Pushing publishes it and sets one')
   })
 
-  test('uncommitted changes grey pull, for the reason the select is frozen, and not push', () => {
+  test('uncommitted changes leave pull pressable, with the caveat in its tooltip', () => {
     paint({ dirty: [dirty(' M', 'a')], remote: tracking({ ahead: 1, behind: 1 }) })
     const pull = screen.getByRole('button', { name: 'Pull' })
-    expect(pull.getAttribute('data-why')).toBe('dirty')
-    expect(document.getElementById('pull-off')?.textContent).toContain('Pull is off while 1 change is uncommitted')
+    expect(pull.hasAttribute('disabled')).toBe(false)
+    expect(pull.getAttribute('data-why')).toBe('none')
+    expect(document.getElementById('pull-off')).toBe(null)
     expect(screen.getByRole('button', { name: 'Push' }).hasAttribute('disabled')).toBe(false)
   })
 

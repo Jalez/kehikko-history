@@ -33,6 +33,31 @@ import type { Reading } from '@/store/ask.ts'
  * happen, its count is shown WITH how old it is, and "already up to date" is
  * git's honest answer when a press finds nothing. The staleness is said in the
  * tooltip in the same relative units the commit rows use, from `terse.ts`.
+ *
+ * ## Uncommitted work is a caveat on pull, and was a refusal
+ *
+ * It greyed pull outright, on the argument that a fast-forward rewrites the
+ * working tree the way a checkout does and that a control which works three
+ * times out of four is worse than one that is off for a readable reason.
+ *
+ * That argument was wrong about this repository and about git. It was wrong
+ * about the repository because something is uncommitted on a working project
+ * nearly all of the time — the modules write to `.kehikot` while somebody
+ * uses them, and a project that keeps that folder in its own history therefore
+ * has a dirty tree as its normal state. Pull was not off three times out of
+ * four; it was off, and the person who reported this had never seen it on.
+ *
+ * It was wrong about git because a fast-forward is not a checkout of the whole
+ * tree. Git refuses one exactly when it would write over a file that has
+ * uncommitted changes, it names those files, and it refuses the whole pull —
+ * the same all-or-nothing guarantee `--ff-only` already rests on everywhere
+ * else in this pane. There is no half-done state to be got into, so there is
+ * nothing here for the pane to protect anybody from by asking first.
+ *
+ * So pull is on, and its tooltip carries the caveat rather than the refusal:
+ * what is uncommitted, and that git will refuse the whole pull and change
+ * nothing if bringing the commits in would touch any of it. That refusal comes
+ * back as a sentence naming the files, from `pull` in `git/remote.ts`.
  */
 
 export type Why =
@@ -43,7 +68,6 @@ export type Why =
   | 'no-upstream'
   | 'ambiguous'
   | 'nothing'
-  | 'dirty'
 
 export interface Control {
   /** Whether the press is offered. */
@@ -136,15 +160,10 @@ export function pullControl(reading: Reading, now: number = Date.now()): Control
     return off('no-upstream', `${branch} has no upstream branch yet, so there is nothing to pull from. Pushing publishes it and sets one.`)
   }
   const count = remote.behind > 0 ? remote.behind : null
-  if (dirty.length) {
-    const changes = dirty.length === 1 ? '1 change is' : `${dirty.length} changes are`
-    return off(
-      'dirty',
-      `Pull is off while ${changes} uncommitted — a pull rewrites the working tree the way a checkout does. Commit or `
-        + 'discard them in the Uncommitted tab first.',
-      count,
-    )
-  }
+  const caveat = dirty.length
+    ? ` ${dirty.length === 1 ? '1 file has' : `${dirty.length} files have`} uncommitted changes: if bringing those `
+      + 'commits in would write over any of them, git refuses the whole pull and changes nothing.'
+    : ''
   return {
     on: true,
     word: 'pull',
@@ -152,7 +171,7 @@ export function pullControl(reading: Reading, now: number = Date.now()): Control
     reason:
       `Pull ${remote.upstream} into ${branch} — fast-forward only: if both sides have moved it refuses and changes `
       + `nothing. ${count === null ? 'Nothing new' : count === 1 ? '1 commit' : `${count} commits`} to bring in `
-      + `${freshness(remote.fetchedAt, now)}.`,
+      + `${freshness(remote.fetchedAt, now)}.${caveat}`,
     why: 'none',
   }
 }

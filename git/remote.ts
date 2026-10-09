@@ -83,21 +83,30 @@ import type { GitRunner } from './run.ts'
  *
  * ## What is refused BEFORE git, and why it is not git's refusal rewritten
  *
- * Detached HEAD, no remote, no upstream, uncommitted changes. All four are
- * things the page can see from the read that drew the controls, so it greys
- * the control rather than offering a press that will be refused. This file
- * refuses them again because it is also reachable from a request that did not
- * look, and it says the same sentence the tooltip says. What it does NOT do is
- * pre-empt anything git would decide — a rejected push, an unreachable host,
- * a bad credential — those come back in git's own words with one line of
- * advice in front.
+ * Detached HEAD, no remote, no upstream. All three are things the page can see
+ * from the read that drew the controls, so it greys the control rather than
+ * offering a press that will be refused. This file refuses them again because
+ * it is also reachable from a request that did not look, and it says the same
+ * sentence the tooltip says. What it does NOT do is pre-empt anything git
+ * would decide — a rejected push, an unreachable host, a bad credential —
+ * those come back in git's own words with one line of advice in front.
  *
- * `pull` over uncommitted changes is refused here for the reason the branch
- * select is frozen over them: a fast-forward rewrites the working tree the way
- * a checkout does, and git will refuse it only for the files the pull touches,
- * which means it would sometimes succeed and sometimes not depending on which
- * files somebody happened to be editing. A control that is off for a reason a
- * person can read is better than one that works three times out of four.
+ * ## Uncommitted work used to be a fourth, and it is git's decision again
+ *
+ * `pull` refused outright over any uncommitted file, on the argument that a
+ * fast-forward rewrites the working tree the way a checkout does. It does not.
+ * Git refuses a fast-forward exactly when it would write over a file holding
+ * uncommitted changes; it names those files; and it refuses the WHOLE pull, so
+ * there is no half-done state — the same all-or-nothing guarantee `--ff-only`
+ * already rests on here. Deciding it in advance bought no safety and cost the
+ * press: something is uncommitted on a working project nearly all the time, so
+ * pull was not occasionally off, it was off, including on the one screen that
+ * tells a person to press it — the refusal of a non-fast-forward push, whose
+ * advice is "pull to bring their commits in, then push again".
+ *
+ * So the pre-flight `git status` is gone and git decides. Its refusal comes
+ * back as the sentence below, with the files it named in `wouldLose`, drawn
+ * the same way `switchTo` in `repo.ts` draws them.
  */
 
 export interface Tracking {
@@ -366,19 +375,6 @@ export async function pull(cwd: string, git: GitRunner, own: boolean): Promise<M
     )
   }
 
-  const status = await git(['status', '--porcelain', '-z'], { cwd })
-  const dirty = status.ok ? status.out.split('\0').filter((record) => record.length >= 4) : []
-  if (dirty.length) {
-    return {
-      ok: false,
-      said:
-        'There is work here that is not committed, so nothing was pulled. A pull rewrites the working tree the way '
-        + 'a checkout does, and would take those files out from under whoever is editing them. Commit them, or '
-        + 'discard them in the Uncommitted tab, and then pull.',
-      wouldLose: dirty.map((record) => record.slice(3)).slice(0, 50),
-    }
-  }
-
   const before = await git(['rev-parse', 'HEAD'], { cwd })
   const done = await git(
     [...(own ? hooked : []), 'pull', '--ff-only', '--no-rebase', at.upstreamRemote, at.upstreamRef],
@@ -386,6 +382,22 @@ export async function pull(cwd: string, git: GitRunner, own: boolean): Promise<M
   )
   if (!done.ok) {
     const words = `${done.err}\n${done.out}`
+    if (/would be overwritten by|Please commit your changes or stash/i.test(words)) {
+      /* Git names the files under its own message, one per line, tab-indented.
+         Taken as written rather than re-read from `status`: these are the ones
+         git stopped for, which is a shorter and more useful list than
+         everything that happens to be uncommitted. */
+      return {
+        ok: false,
+        said:
+          `Bringing ${at.upstream} in would have written over work here that is not committed, so git refused the `
+          + 'whole pull and nothing changed — not the branch, and not those files. The fetch half did happen, so the '
+          + 'count beside pull is now current. Commit the files below, or discard them in the Uncommitted tab, and '
+          + 'pull again.'
+          + `\n\ngit said: ${(done.err || done.out).trim()}`,
+        wouldLose: [...new Set(words.split('\n').flatMap((line) => (/^\t(.+)$/.exec(line.replace(/\r$/, '')) ?? []).slice(1)))].slice(0, 50),
+      }
+    }
     if (/not possible to fast-forward|diverg|specify how to reconcile/i.test(words)) {
       return no(
         `${at.branch} and ${at.upstream} have both moved since they last agreed, so bringing ${at.upstream} in would `
