@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { PROTOCOL, manifestSchema } from 'kehikot-module-protocol'
+import { PACKAGE_VERSION, PROTOCOL, manifestSchema } from 'kehikot-module-protocol'
 
 import { ID, MANIFEST, PREFERRED_PORT, VERSION } from '../manifest.ts'
 
@@ -27,23 +27,17 @@ describe('a host will accept this', () => {
     expect(MANIFEST.declares.protocol).toBe(`>=${PROTOCOL} <${PROTOCOL + 1}`)
   })
 
-  test('the protocol installed is 0.35.0', () => {
-    /* The version is pinned by hand because `bun update` ALONE will not move a
-       `#main` git dependency — it takes `bun pm cache rm` first — and a stale
-       copy fails in the quietest possible way: `parse` strips fields it has
-       never heard of without complaining. 0.12 carried
-       `kehikot-module-protocol/client`, the wire this module stopped writing for
-       itself; 0.13 carries `/serve`, the port and the registration it stopped
-       deciding for itself. A copy older than that has no `serves()` at all, and
-       the failure is a Vite config that will not load. 0.25 is the rename: `kehikot-module-protocol`
-       itself, both spellings read. 0.28 is `tags`, which a copy older than that drops from this
-       manifest without a word. 0.34 is `partless`, which a copy older than that drops from this
-       manifest the same way. 0.35 is the shared plumbing: `doors()`, `ask()`, `useHost`, `Cover` and
-       the build identity, without which `vite.config.ts` does not load. */
-    const pkg = JSON.parse(
-      readFileSync(join(root, 'node_modules', 'kehikot-module-protocol', 'package.json'), 'utf8'),
-    ) as { version: string }
-    expect(pkg.version).toBe('0.35.0')
+  test('the protocol installed is the one package.json pins', () => {
+    /* A stale copy fails in the quietest possible way — `parse` strips fields it has never heard
+       of without complaining, and one older than the shared plumbing has no `doors()` for
+       `vite.config.ts` to load. So: the copy in node_modules is the tag this module names, and it
+       says the same version of itself in its code as in its package.json. No literal version here,
+       so moving the pin is one edit in package.json. */
+    const read = (...at: string[]) => JSON.parse(readFileSync(join(root, ...at, 'package.json'), 'utf8'))
+    const pinned = (read() as { dependencies: Record<string, string> }).dependencies['kehikot-module-protocol']
+    const installed = read('node_modules', 'kehikot-module-protocol') as { version: string }
+    expect(installed.version).toBe(PACKAGE_VERSION)
+    expect(pinned).toEndWith(`#v${PACKAGE_VERSION}`)
   })
 
   test('the id, the entry and the health path are the ones every other file uses', () => {

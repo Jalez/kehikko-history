@@ -1,4 +1,4 @@
-import { AskFailed, answered, ask } from 'kehikot-module-protocol/client'
+import { answered, ask, replied } from 'kehikot-module-protocol/client'
 
 import type { Both } from '../../doors.ts'
 import type { Standing } from '../../git/committer.ts'
@@ -87,12 +87,8 @@ export interface Started {
  * somebody's project.
  */
 export async function start(projectPath: string, asked: boolean): Promise<Started> {
-  const reply = await ask<Started>('/api/watch', { body: { project: projectPath, asked } })
-  if (reply.ok) return reply.body
   /* "Not started, and why" is an answer of this door's own shape rather than a failure of the asking. */
-  const said = reply.body as Partial<Started> | null
-  if (reply.kind === 'refused' && said && typeof said === 'object' && 'standing' in said) return said as Started
-  throw new AskFailed(reply)
+  return replied(await ask<Started>('/api/watch', { body: { project: projectPath, asked } }))
 }
 
 /** Move HEAD. Refused outright when anything is uncommitted; see `switchTo` in `git/repo.ts`. */
