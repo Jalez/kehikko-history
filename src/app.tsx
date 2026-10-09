@@ -1,14 +1,15 @@
 import { X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
+import type { HostEvents } from 'kehikot-module-protocol/client'
+import { Cover, coverFor, useHost, useServerStanding, type CoverState, type KeptCodec } from 'kehikot-module-protocol/client/react'
+
 import { ID } from '../manifest.ts'
 
 import { Button } from '@/components/ui/button.tsx'
 import * as ask from '@/store/ask.ts'
 import type { Both, Said, Standing, Which } from '@/store/ask.ts'
-import { useKehikot, type GotoHandler } from '@/wire/use-kehikot.ts'
 import { History, Pick } from '@/view/history.tsx'
-import { Nowhere } from '@/view/nowhere.tsx'
 
 /**
  * The page.
@@ -76,6 +77,16 @@ const framed = typeof window !== 'undefined' && window.parent !== window
 const REREAD_MS = 4000
 
 /**
+ * The one word this module keeps with the host: which of the two histories was in front. Strict —
+ * anything else is `null`, so an older version's string gives first-run behaviour rather than a
+ * pane silently pointed at a repository nobody chose.
+ */
+export const KEPT: KeptCodec<Which> = {
+  read: (state) => (state === 'project' || state === 'kehikot' ? state : null),
+  write: (which) => which,
+}
+
+/**
  * What a press answered, and the press that takes it off the screen.
  *
  * ## An answer that cannot be dismissed outlives its question
@@ -139,7 +150,7 @@ export function App() {
   const [shown, setShown] = useState<{ sha: string; text: string } | null>(null)
   const [standing, setStanding] = useState<Standing | null>(null)
 
-  const onGoto = useCallback<GotoHandler>((message, answer) => {
+  const onGoto = useCallback<NonNullable<HostEvents['onGoto']>>((message, answer) => {
     /* A `goto` may name an epic, a step, or a reference. This pane shows git
        repositories, so the honest answer to all three is that there is nothing
        here to be walked to — saying so quickly is what gets the reader the
@@ -152,7 +163,10 @@ export function App() {
     )
   }, [])
 
-  const { where, projectPath, project, kept, remember, resize } = useKehikot(ID, onGoto)
+  const { where, projectPath, project, kept, remember, resize } = useHost<Which>(ID, { onGoto }, { kept: KEPT })
+  /* How this page's own server last answered: `down` when nothing did, `stale` when it has restarted under this page. */
+  const server = useServerStanding()
+  const [again, setAgain] = useState(0)
 
   /* The remembered repository wins whenever there is one, and only ever on
      arrival — after that this page's own state is the answer. Two answers to
@@ -222,8 +236,9 @@ export function App() {
           setStanding(answer.standing)
         })
         .catch(() => {
-          /* Loopback to our own origin, so a failure is this app's own server
-             being gone. The next tick tries again. */
+          /* Loopback to our own origin, so a failure is this app's own server being gone. `ask`
+             has already said so to `useServerStanding`, which is what draws the cover below; the
+             next tick — or Try again — asks again. */
         })
     look()
     const timer = setInterval(look, REREAD_MS)
@@ -231,7 +246,7 @@ export function App() {
       alive = false
       clearInterval(timer)
     }
-  }, [projectPath])
+  }, [projectPath, again])
 
   /** Every press, through one place, so the answer is reported the same way each time. */
   const act = useCallback(
@@ -278,18 +293,17 @@ export function App() {
   const reading = both ? (facing === 'project' ? both.project : both.kehikot) : null
 
   /*
-   * `nowhere` is drawn only once the greeting has settled.
-   *
-   * At mount there is no context yet, so the first read goes out with no project
-   * and comes back `nowhere: true`, which is true and is not yet worth saying: a
-   * page that announced "no project is open" for one frame and was then greeted
-   * would teach the reader that this screen is noise. Same argument as the
-   * greeting grace in `use-kehikot.ts`, applied to the same 700 milliseconds.
+   * Every not-ready moment is the protocol's one cover, and the order is what makes it true: a
+   * page that has not been greeted is `waiting`, never "no project" — the first read goes out with
+   * no project and comes back `nowhere`, which is not worth saying for 700 milliseconds.
    */
+  const cover: CoverState | null =
+    server === 'stale'
+      ? 'stale'
+      : (coverFor({ where, projectPath }) ?? (server === 'down' ? 'down' : !both ? 'loading' : both.nowhere ? 'no-project' : null))
+
   const screen =
-    both?.nowhere && where !== 'listening' ? (
-      <Nowhere unhosted={where === 'unhosted'} project={project} />
-    ) : both?.trouble ? (
+    both?.trouble ? (
       <p className="rounded border border-failed/40 bg-failed/5 px-2 py-1.5 text-[0.7rem] leading-4 text-failed">
         {both.trouble}
       </p>
@@ -338,11 +352,7 @@ export function App() {
         }
         shown={shown}
       />
-    ) : (
-      <p className="text-[0.7rem] leading-4 text-muted-foreground">
-        {where === 'listening' ? 'Waiting to hear which project is open.' : 'Reading the history.'}
-      </p>
-    )
+    ) : null
 
   return (
     <div ref={shell} className="flex min-w-0 flex-col gap-2 p-2 text-foreground">
@@ -359,7 +369,7 @@ export function App() {
         </header>
       )}
 
-      {both && !both.nowhere && !one ? <Pick which={which} onPick={pick} /> : null}
+      {!cover && both && !both.nowhere && !one ? <Pick which={which} onPick={pick} /> : null}
 
       {/*
         Where the repository is, and ONLY when that is a question.
@@ -374,7 +384,7 @@ export function App() {
         chooser above says "Project" or ".kehikot" and this says which folder
         that is on disk. So it is drawn exactly when the chooser is.
       */}
-      {reading && both && !both.nowhere && !one ? (
+      {!cover && reading && both && !both.nowhere && !one ? (
         <p className="min-w-0 text-[0.6rem] leading-4 text-muted-foreground [overflow-wrap:anywhere]">{reading.root}</p>
       ) : null}
 
@@ -405,7 +415,17 @@ export function App() {
         </Banner>
       ) : null}
 
-      {screen}
+      {cover ? (
+        <Cover
+          state={cover}
+          name="History"
+          onRetry={() => setAgain((n) => n + 1)}
+          /* A name is not a path, and this pane will not guess: a guess here is `git init` in a folder nobody chose. */
+          detail={cover === 'no-project' && project ? `Kehikot named “${project}” but not where it is on this machine.` : null}
+        />
+      ) : null}
+      {/* Kept mounted under a cover, so a half-written commit message survives the server coming back. */}
+      <div hidden={cover !== null}>{screen}</div>
     </div>
   )
 }
