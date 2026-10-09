@@ -27,7 +27,7 @@ describe('a host will accept this', () => {
     expect(MANIFEST.declares.protocol).toBe(`>=${PROTOCOL} <${PROTOCOL + 1}`)
   })
 
-  test('the protocol installed is 0.28.0', () => {
+  test('the protocol installed is 0.34.0', () => {
     /* The version is pinned by hand because `bun update` ALONE will not move a
        `#main` git dependency — it takes `bun pm cache rm` first — and a stale
        copy fails in the quietest possible way: `parse` strips fields it has
@@ -37,11 +37,12 @@ describe('a host will accept this', () => {
        deciding for itself. A copy older than that has no `serves()` at all, and
        the failure is a Vite config that will not load. 0.25 is the rename: `kehikot-module-protocol`
        itself, both spellings read. 0.28 is `tags`, which a copy older than that drops from this
-       manifest without a word. */
+       manifest without a word. 0.34 is `partless`, which a copy older than that drops from this
+       manifest the same way. */
     const pkg = JSON.parse(
       readFileSync(join(root, 'node_modules', 'kehikot-module-protocol', 'package.json'), 'utf8'),
     ) as { version: string }
-    expect(pkg.version).toBe('0.28.0')
+    expect(pkg.version).toBe('0.34.0')
   })
 
   test('the id, the entry and the health path are the ones every other file uses', () => {
