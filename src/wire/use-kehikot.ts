@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { connect, type Connection, type HostEvents } from 'roadmap-module-protocol/client'
+import { connect, type Connection, type HostEvents } from 'kehikot-module-protocol/client'
 
 /**
  * The bridge, as one React value.
  *
- * `roadmap-module-protocol/client` is the wire and knows no React; this is the
+ * `kehikot-module-protocol/client` is the wire and knows no React; this is the
  * only file that turns messages into state, and it is deliberately the only
  * one. Two places driving "what can this page see" would eventually disagree.
  *
@@ -68,7 +68,7 @@ export function reading(state: string | null): Kept | null {
   return null
 }
 
-export interface Roadmap {
+export interface Kehikot {
   where: Where
   /**
    * Where the open project is on this machine, or null.
@@ -100,7 +100,7 @@ interface Context {
   theme: 'light' | 'dark'
 }
 
-export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
+export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
   const [where, setWhere] = useState<Where>('listening')
   const [projectPath, setProjectPath] = useState<string | null>(null)
   const [projectName, setProjectName] = useState<string | null>(null)

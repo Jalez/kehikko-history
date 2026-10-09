@@ -22,7 +22,7 @@ bun run register        # or: PORT=7960 bun run register
 ```
 
 Then open `http://127.0.0.1:7960/app`, or reload a kehikko host; it sweeps
-`~/.roadmap/modules` on every read.
+`~/Library/Application Support/Kehikot/modules` on every read.
 
 ---
 
@@ -427,7 +427,7 @@ manifest.ts        what a host reads. scope: 'global', and the argument for it
 doors.ts           every door but the page: /healthz, /mcp, /api/*
 vite.config.ts     the doors as middleware, and the missing server.cors
 run.sh             PORT, exec, no build, no dist
-register.ts        ~/.roadmap/modules/roadmap.history.json — url and dir
+register.ts        ~/Library/Application Support/Kehikot/modules/kehikot.history.json — url and dir
 
 git/run.ts         the seam: spawn with an array, shell:false, an allowlist
 git/names.ts       every string that reaches an argument, and the rules
@@ -446,7 +446,7 @@ epic-scoped tab follows the reader, which is right for a checklist held against 
 paper. A history's subject does not move when somebody clicks a different epic:
 there is one `.kehikot` repository per project and one project repository per
 project. The thing this module follows is the project, and `projectPath` arrives
-in `roadmap.context` for a global mode exactly as it does for an epic one.
+in `kehikot.context` for a global mode exactly as it does for an epic one.
 
 `declares.storage: true` and **no `server.cors`** — the pair is load-bearing and
 either half on its own is a bug. `test/manifest.test.ts` asserts the absence

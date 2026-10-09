@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { PROTOCOL, manifestSchema } from 'roadmap-module-protocol'
+import { PROTOCOL, manifestSchema } from 'kehikot-module-protocol'
 
 import { ID, MANIFEST, PREFERRED_PORT, VERSION } from '../manifest.ts'
 
@@ -27,23 +27,25 @@ describe('a host will accept this', () => {
     expect(MANIFEST.declares.protocol).toBe(`>=${PROTOCOL} <${PROTOCOL + 1}`)
   })
 
-  test('the protocol installed is 0.13.0', () => {
+  test('the protocol installed is 0.28.0', () => {
     /* The version is pinned by hand because `bun update` ALONE will not move a
        `#main` git dependency — it takes `bun pm cache rm` first — and a stale
        copy fails in the quietest possible way: `parse` strips fields it has
        never heard of without complaining. 0.12 carried
-       `roadmap-module-protocol/client`, the wire this module stopped writing for
+       `kehikot-module-protocol/client`, the wire this module stopped writing for
        itself; 0.13 carries `/serve`, the port and the registration it stopped
        deciding for itself. A copy older than that has no `serves()` at all, and
-       the failure is a Vite config that will not load. */
+       the failure is a Vite config that will not load. 0.25 is the rename: `kehikot-module-protocol`
+       itself, both spellings read. 0.28 is `tags`, which a copy older than that drops from this
+       manifest without a word. */
     const pkg = JSON.parse(
-      readFileSync(join(root, 'node_modules', 'roadmap-module-protocol', 'package.json'), 'utf8'),
+      readFileSync(join(root, 'node_modules', 'kehikot-module-protocol', 'package.json'), 'utf8'),
     ) as { version: string }
-    expect(pkg.version).toBe('0.13.0')
+    expect(pkg.version).toBe('0.28.0')
   })
 
   test('the id, the entry and the health path are the ones every other file uses', () => {
-    expect(ID).toBe('roadmap.history')
+    expect(ID).toBe('kehikot.history')
     expect(MANIFEST.id).toBe(ID)
     expect(MANIFEST.version).toBe(VERSION)
     expect(MANIFEST.entry).toBe('/app')
@@ -143,7 +145,7 @@ describe('the registration this module ships', () => {
     const lines = readFileSync(join(root, 'run.sh'), 'utf8')
       .split('\n')
       .filter((line) => line.startsWith('exec '))
-    expect(lines).toEqual(['exec bunx vite'])
+    expect(lines).toEqual(['exec bunx vite $VITE_FORCE'])
   })
 
   test('the registration carries both a url and a dir', () => {

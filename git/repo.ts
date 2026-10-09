@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-import { KEHIKOT_DIR, kehikotDir, within } from 'roadmap-module-protocol'
+import { KEHIKOT_DIR, kehikotDir, within } from 'kehikot-module-protocol'
 
 import { hooked, mayInit, refusal, saying, type Stance } from './enclosing.ts'
 import { branchName, commitish, message as checkMessage, repoPath, type Which } from './names.ts'

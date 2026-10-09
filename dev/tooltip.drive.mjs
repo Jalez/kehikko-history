@@ -32,11 +32,11 @@ page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`))
 await page.goto(PAGE, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(600)
 /* The page waits to be told which project is open, the way `small.drive.mjs`
-   does it: one `roadmap.hello` posted into its own window. */
+   does it: one `kehikot.hello` posted into its own window. */
 await page.evaluate((projectPath) => {
   window.postMessage(
     {
-      type: 'roadmap.hello',
+      type: 'kehikot.hello',
       protocol: 2,
       session: 'tooltip-drive',
       context: { projectPath, project: 'scratch', theme: 'light' },

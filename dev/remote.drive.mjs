@@ -4,7 +4,7 @@
  * then press both and read what the pane said.
  *
  *     mkdir -p /tmp/kh-drive/modules
- *     ROADMAP_MODULES_DIR=/tmp/kh-drive/modules PORT=7983 bunx vite &
+ *     KEHIKOT_MODULES_DIR=/tmp/kh-drive/modules PORT=7983 bunx vite &
  *     PROJECT=/tmp/kh-drive/project node dev/remote.drive.mjs http://127.0.0.1:7983/app /tmp/kh-drive/shots
  *
  * `PROJECT` must be a git repository with a remote it can actually reach —
@@ -68,7 +68,7 @@ async function open(width) {
   await page.waitForTimeout(600)
   await page.evaluate((projectPath) => {
     window.postMessage(
-      { type: 'roadmap.hello', protocol: 2, session: 'drive', context: { projectPath, project: 'scratch', theme: 'light' }, state: null },
+      { type: 'kehikot.hello', protocol: 2, session: 'drive', context: { projectPath, project: 'scratch', theme: 'light' }, state: null },
       '*',
     )
   }, PROJECT)

@@ -6,7 +6,7 @@ import { ID } from '../manifest.ts'
 import { Button } from '@/components/ui/button.tsx'
 import * as ask from '@/store/ask.ts'
 import type { Both, Said, Standing, Which } from '@/store/ask.ts'
-import { useRoadmap, type GotoHandler } from '@/wire/use-roadmap.ts'
+import { useKehikot, type GotoHandler } from '@/wire/use-kehikot.ts'
 import { History, Pick } from '@/view/history.tsx'
 import { Nowhere } from '@/view/nowhere.tsx'
 
@@ -41,14 +41,14 @@ import { Nowhere } from '@/view/nowhere.tsx'
  *
  * ## Which one is in front is remembered
  *
- * One word, kept by the host, unkeyed by canvas — see `use-roadmap.ts`. A
+ * One word, kept by the host, unkeyed by canvas — see `use-kehikot.ts`. A
  * remembered `kehikot` on a project that turns out to have one repository is
  * simply overridden: there is no second repository to remember.
  *
  * ## Switching project repaints, without a reload
  *
  * `projectPath` is a dependency of the read and of the start. A host that moves
- * a person to another project sends one `roadmap.context`, this hook sets one
+ * a person to another project sends one `kehikot.context`, this hook sets one
  * piece of state, and both run again against the other project. Nothing is
  * cached across the change.
  *
@@ -152,7 +152,7 @@ export function App() {
     )
   }, [])
 
-  const { where, projectPath, project, kept, remember, resize } = useRoadmap(ID, onGoto)
+  const { where, projectPath, project, kept, remember, resize } = useKehikot(ID, onGoto)
 
   /* The remembered repository wins whenever there is one, and only ever on
      arrival — after that this page's own state is the answer. Two answers to
@@ -284,7 +284,7 @@ export function App() {
    * and comes back `nowhere: true`, which is true and is not yet worth saying: a
    * page that announced "no project is open" for one frame and was then greeted
    * would teach the reader that this screen is noise. Same argument as the
-   * greeting grace in `use-roadmap.ts`, applied to the same 700 milliseconds.
+   * greeting grace in `use-kehikot.ts`, applied to the same 700 milliseconds.
    */
   const screen =
     both?.nowhere && where !== 'listening' ? (
