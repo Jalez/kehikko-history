@@ -168,6 +168,8 @@ export const MANIFEST: Manifest = manifestSchema.parse({
     about: 'Both of a project’s histories — its own repository and the .kehikot data repository — and committing to the second deliberately.',
   },
   extensions: { emits: [], consumes: [] },
+  /* Why this module has nothing to narrow by the parts of an epic. */
+  partless: 'Shows commits, which belong to no epic and no part.',
   declares: {
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,
     uses: ['state:keep'],
