@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { toolEffect } from 'kehikot-module-protocol'
+
 import { TICKET, answer } from '../doors.ts'
 import type { GitResult, GitRunner } from '../git/run.ts'
 import { locate, parseStatus } from '../git/repo.ts'
@@ -135,6 +137,24 @@ describe('the MCP door has the shape the other modules have', () => {
     expect(names).toEqual(['history', 'record', 'show_commit', 'restore_file'])
     expect(names).not.toContain('checkout')
     expect(names).not.toContain('branch')
+  })
+
+  test('every tool says in MCP’s own words whether it only reads, and which may overwrite', async () => {
+    const { run } = fakeGit()
+    const reply = await answer('POST', '/mcp', new URLSearchParams(), { jsonrpc: '2.0', id: 1, method: 'tools/list' }, null, run)
+    const tools = (reply?.body as { result: { tools: { name: string; annotations?: object }[] } }).result.tools
+    expect(Object.fromEntries(tools.map((one) => [one.name, toolEffect(one)]))).toEqual({
+      history: 'reads',
+      show_commit: 'reads',
+      record: 'writes',
+      restore_file: 'destroys',
+    })
+  })
+
+  test('the project may be named projectPath, as a caller from before the one spelling does', async () => {
+    const { run } = fakeGit()
+    const said = textOf(await answer('POST', '/mcp', new URLSearchParams(), rpc('history', { projectPath: '/definitely/not/a/project', which: 'project' }), null, run))
+    expect(said).not.toContain('this needs project')
   })
 
   test('an unknown tool is answered with a sentence naming what is here', async () => {
