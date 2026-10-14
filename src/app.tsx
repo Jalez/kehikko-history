@@ -9,7 +9,7 @@ import { ID } from '../manifest.ts'
 import { Button } from '@/components/ui/button.tsx'
 import * as ask from '@/store/ask.ts'
 import type { Both, Said, Standing, Which } from '@/store/ask.ts'
-import { HeaderFallback } from '@/view/header-fallback.tsx'
+import { fallbackShows, HeaderFallback, headerDrawn, rememberHeaderDrawn } from '@/view/header-fallback.tsx'
 import { headerOf, type Tab } from '@/view/header.ts'
 import { History } from '@/view/history.tsx'
 
@@ -142,25 +142,6 @@ export function Banner({ kind, children, onClose }: { kind: 'done' | 'failed'; c
   )
 }
 
-const DRAWN_KEY = 'kehikot.history.header-drawn'
-
-/** Whether a host has ever pressed a header item on this page's origin: such a host draws the header. */
-function headerDrawn(): boolean {
-  try {
-    return window.localStorage.getItem(DRAWN_KEY) === 'yes'
-  } catch {
-    return false
-  }
-}
-
-function rememberHeaderDrawn(): void {
-  try {
-    window.localStorage.setItem(DRAWN_KEY, 'yes')
-  } catch {
-    /* It is hidden for this page's life all the same. */
-  }
-}
-
 export function App() {
   const [both, setBoth] = useState<Both | null>(null)
   const [which, setWhich] = useState<Which>('kehikot')
@@ -188,7 +169,7 @@ export function App() {
     )
   }, [])
 
-  const { where, projectPath, project, kept, remember, resize, header } = useHost<Which>(
+  const { where, projectPath, project, kept, remember, resize, header, drawsHeader } = useHost<Which>(
     ID,
     {
       onGoto,
@@ -418,8 +399,8 @@ export function App() {
     }
     return `Nothing here is called ${item}.`
   }
-  /* Drawn by the page itself where nobody frames it, or no host has pressed one of these items yet. */
-  const fallback = where !== 'hosted' || !pressed
+  /* Drawn by the page itself where nobody frames it or the host says it draws no header; with an older host (no word), until a press has arrived. */
+  const fallback = fallbackShows(where, drawsHeader, pressed)
 
   return (
     <div ref={shell} className="relative flex min-w-0 flex-col gap-2 p-2 text-foreground">
