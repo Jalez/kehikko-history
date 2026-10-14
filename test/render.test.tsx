@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 
 import { resetServerStanding } from 'kehikot-module-protocol/client'
 
 import { App, Banner, KEPT } from '../src/app.tsx'
 import { Arm } from '../src/view/arm.tsx'
-import { History, Pick } from '../src/view/history.tsx'
+import { History } from '../src/view/history.tsx'
+import { headerOf } from '../src/view/header.ts'
 import type { Dirty, Reading } from '../git/repo.ts'
 
 /**
@@ -67,9 +69,17 @@ afterEach(cleanup)
 
 const nothing = () => {}
 
+/** The tab is the page's header's to switch (`app.tsx`); a test switches it the way a press does. */
+let setTab: (tab: 'commits' | 'uncommitted') => void = () => {}
+function Controlled(props: Omit<Parameters<typeof History>[0], 'tab'>) {
+  const [tab, set] = useState<'commits' | 'uncommitted'>('commits')
+  setTab = set
+  return <History {...props} tab={tab} />
+}
+
 const paint = (over: Partial<Reading> = {}, extra: Partial<Parameters<typeof History>[0]> = {}) =>
   render(
-    <History
+    <Controlled
       reading={reading(over)}
       standing={null}
       at="repository"
@@ -91,8 +101,7 @@ const paint = (over: Partial<Reading> = {}, extra: Partial<Parameters<typeof His
 
 /** The Uncommitted tab, opened. Radix tabs switch on click in happy-dom as they do in a browser. */
 const openUncommitted = () => {
-  fireEvent.mouseDown(screen.getByRole('tab', { name: /Uncommitted/ }))
-  fireEvent.click(screen.getByRole('tab', { name: /Uncommitted/ }))
+  act(() => setTab('uncommitted'))
 }
 
 describe('a destructive press takes two, and there is no confirm() anywhere', () => {
@@ -349,26 +358,44 @@ describe('push and pull sit on the branch row, and say what they will do', () =>
   })
 })
 
-describe('the two tabs are two halves of one repository', () => {
-  test('they are called Commits and Uncommitted, and the count is in the title', () => {
+describe('the two halves of one repository are the header\u2019s switch, not a strip of tabs', () => {
+  test('the page draws no tab strip and no chooser; the halves are options of one switch', () => {
     paint({ dirty: [dirty(' M', 'a'), dirty('??', 'b'), dirty(' D', 'c')] })
-    expect(screen.getByRole('tab', { name: 'Commits' })).toBeTruthy()
-    expect(screen.getByRole('tab', { name: 'Uncommitted (3)' })).toBeTruthy()
-    expect(screen.queryByRole('tab', { name: 'Project' })).toBe(null)
-    expect(screen.queryByRole('tab', { name: 'Data' })).toBe(null)
+    expect(screen.queryByRole('tab')).toBe(null)
+    expect(screen.queryByRole('radiogroup')).toBe(null)
+    const tab = headerOf({ tab: 'commits', uncommitted: 3, repository: null })
+    expect(tab).toHaveLength(1)
+    expect(tab[0]).toMatchObject({ kind: 'switch', id: 'tab', value: 'commits', agents: true })
+    expect((tab[0] as { options: { id: string; label: string }[] }).options).toEqual([
+      { id: 'commits', label: 'Commits' },
+      { id: 'uncommitted', label: 'Uncommitted (3)' },
+    ])
   })
 
-  test('a clean tree is Uncommitted (0), and the tab says so in words', () => {
+  test('a clean tree is Uncommitted (0), and the Uncommitted half says so in words', () => {
     paint()
-    expect(screen.getByRole('tab', { name: 'Uncommitted (0)' })).toBeTruthy()
     openUncommitted()
     expect(document.body.textContent).toContain('Nothing is uncommitted')
   })
 
-  test('the Commits tab is what is shown first, with the commit list on it', () => {
+  test('the Commits half is what is shown first, with the commit list on it', () => {
     paint()
-    expect(screen.getByRole('tab', { name: 'Commits' }).getAttribute('aria-selected')).toBe('true')
     expect(document.body.textContent).toContain('notes: 2 added on chapters/3_method.tex')
+    expect(document.body.textContent).not.toContain('Nothing is uncommitted')
+  })
+
+  test('the repository chooser is there when there are two, and is a switch', () => {
+    const two = headerOf({ tab: 'commits', uncommitted: 0, repository: 'kehikot' })
+    expect(two.map((one) => one.id)).toEqual(['tab', 'repo'])
+    expect(two[1]).toMatchObject({ kind: 'switch', value: 'kehikot' })
+    expect(headerOf({ tab: 'commits', uncommitted: 0, repository: null }).map((one) => one.id)).toEqual(['tab'])
+    expect(headerOf({ tab: null, uncommitted: 0, repository: null })).toEqual([])
+  })
+
+  test('the list is the same list however the page is drawn again: only the count moves it', () => {
+    const one = JSON.stringify(headerOf({ tab: 'commits', uncommitted: 2, repository: null }))
+    expect(JSON.stringify(headerOf({ tab: 'commits', uncommitted: 2, repository: null }))).toBe(one)
+    expect(JSON.stringify(headerOf({ tab: 'commits', uncommitted: 3, repository: null }))).not.toBe(one)
   })
 })
 
@@ -626,16 +653,6 @@ describe('what is drawn when there is no repository in .kehikot', () => {
   })
 })
 
-describe('the repository chooser is not the tabs', () => {
-  test('it is a captioned radio pair naming the two repositories', () => {
-    render(<Pick which="project" onPick={nothing} />)
-    expect(screen.getByRole('radiogroup', { name: 'Which repository' })).toBeTruthy()
-    expect(screen.getByRole('radio', { name: 'Project' }).getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByRole('radio', { name: '.kehikot' }).getAttribute('aria-checked')).toBe('false')
-    expect(screen.queryByRole('tab')).toBe(null)
-  })
-})
-
 describe('nothing on this screen can push the pane sideways', () => {
   /**
    * The measured failure: shadcn's `Badge` ships `whitespace-nowrap`, and a
@@ -833,19 +850,6 @@ describe('under 320 pixels the pane says the same things in fewer letters', () =
     }
   })
 
-  test('the tabs keep their names as icons: Uncommitted (4) is still Uncommitted (4)', () => {
-    paint({ dirty: [dirty(' M', 'a'), dirty(' M', 'b'), dirty(' M', 'c'), dirty(' M', 'd')] })
-    for (const name of ['Commits', 'Uncommitted (4)']) {
-      const tab = screen.getByRole('tab', { name })
-      expect(tab.querySelector('svg')).not.toBe(null)
-      expect(tab.getAttribute('title')).toBe(name)
-    }
-    /* The count is drawn beside the icon, not hidden with the word. */
-    const uncommitted = screen.getByRole('tab', { name: 'Uncommitted (4)' })
-    const drawnSmall = [...uncommitted.querySelectorAll('span')].filter((span) => !span.className.includes('hidden '))
-    expect(drawnSmall.map((span) => span.textContent)).toContain('4')
-  })
-
   test('detached HEAD keeps its sentence for a reader and its object name for the eye', () => {
     paint({ head: { branch: null, detached: true, sha: 'c'.repeat(40) }, branches: [] })
     const badge = document.querySelector('[data-detached="yes"]') as HTMLElement
@@ -943,6 +947,30 @@ describe('the not-ready moments, each as the one shared cover', () => {
     expect(document.body.textContent).toContain('Nothing is framing this page')
     /* It offers nothing to press, because a picker here would be a guess. */
     expect(within(cover() as HTMLElement).queryAllByRole('button')).toHaveLength(0)
+  })
+
+  test('hosted and ready, the page declares its header once, and a press switches the half in front', async () => {
+    const both = {
+      nowhere: false, trouble: null, standing: null, at: 'elsewhere', said: null, path: '/p/.kehikot',
+      project: { which: 'project', present: true, root: '/p', head: { branch: 'main', detached: false, sha: 'a'.repeat(40) }, branches: [{ name: 'main', current: true }], commits: [], dirty: [], remote: null, trouble: null, absent: null },
+      kehikot: null,
+    }
+    globalThis.fetch = (async () => new Response(JSON.stringify(both), { status: 200 })) as unknown as typeof fetch
+    const sent: { type: string; items?: { id: string; kind: string }[] }[] = []
+    const listen = (event: MessageEvent) => {
+      if (event.data && typeof event.data === 'object' && 'type' in event.data) sent.push(event.data)
+    }
+    window.addEventListener('message', listen)
+    render(<App />)
+    await greet({ project: 'p', projectPath: '/p' })
+    await settle(100)
+    window.removeEventListener('message', listen)
+    const headers = sent.filter((one) => one.type === 'kehikot.header')
+    expect(headers.length).toBeGreaterThan(0)
+    expect(headers.at(-1)?.items?.map((one) => `${one.kind}:${one.id}`)).toEqual(['switch:tab'])
+    /* The page draws neither a tab strip nor a chooser; the one "⋯" is its way to the same items until a host presses. */
+    expect(screen.queryByRole('tab')).toBe(null)
+    expect(document.querySelectorAll('[data-header-fallback]')).toHaveLength(1)
   })
 
   test('hosted with a name and no path: no project, and the detail says a name is not a path', async () => {

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 
+import { doorContext } from 'kehikot-module-protocol'
 import { establishBuild, mintTicket, refuseTicket, type Reply } from 'kehikot-module-protocol/serve'
 
 import { ID, MANIFEST, VERSION } from './manifest.ts'
@@ -324,8 +325,22 @@ function tools() {
         required: ['project', 'which', 'commit', 'path'],
       },
     },
-  ]
+  ].map((tool) => ({ ...tool, annotations: ANNOTATIONS[tool.name as keyof typeof ANNOTATIONS] }))
 }
+
+/**
+ * What each tool says it does, in MCP's own words (`toolEffect` reads them). `history` and
+ * `show_commit` only read. `record` adds a commit and removes nothing: git keeps what it was
+ * made over. `restore_file` writes an older version of a file into the working tree, which is
+ * the one thing here that can overwrite (it refuses over uncommitted changes unless told).
+ * Nothing in this door touches anything outside the project's folder.
+ */
+const ANNOTATIONS = {
+  history: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  show_commit: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  record: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  restore_file: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+} as const
 
 /** One reading as text an agent can act on. */
 function readingText(reading: Reading): string {
@@ -418,7 +433,8 @@ async function mcp(rpc: Rpc, git: GitRunner): Promise<Reply> {
     const args = (rpc.params?.arguments ?? {}) as Record<string, unknown>
 
     try {
-      const where = project(args.project)
+      /* `project`, or `projectPath` for a caller that has not moved to the one spelling. */
+      const where = project(doorContext(args).project)
       if (!where) return text(NO_PROJECT, true)
 
       if (name === 'record') {

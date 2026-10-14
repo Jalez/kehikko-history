@@ -9,7 +9,9 @@ import { ID } from '../manifest.ts'
 import { Button } from '@/components/ui/button.tsx'
 import * as ask from '@/store/ask.ts'
 import type { Both, Said, Standing, Which } from '@/store/ask.ts'
-import { History, Pick } from '@/view/history.tsx'
+import { HeaderFallback } from '@/view/header-fallback.tsx'
+import { headerOf, type Tab } from '@/view/header.ts'
+import { History } from '@/view/history.tsx'
 
 /**
  * The page.
@@ -140,6 +142,25 @@ export function Banner({ kind, children, onClose }: { kind: 'done' | 'failed'; c
   )
 }
 
+const DRAWN_KEY = 'kehikot.history.header-drawn'
+
+/** Whether a host has ever pressed a header item on this page's origin: such a host draws the header. */
+function headerDrawn(): boolean {
+  try {
+    return window.localStorage.getItem(DRAWN_KEY) === 'yes'
+  } catch {
+    return false
+  }
+}
+
+function rememberHeaderDrawn(): void {
+  try {
+    window.localStorage.setItem(DRAWN_KEY, 'yes')
+  } catch {
+    /* It is hidden for this page's life all the same. */
+  }
+}
+
 export function App() {
   const [both, setBoth] = useState<Both | null>(null)
   const [which, setWhich] = useState<Which>('kehikot')
@@ -149,6 +170,10 @@ export function App() {
   const [wouldLose, setWouldLose] = useState<string[]>([])
   const [shown, setShown] = useState<{ sha: string; text: string } | null>(null)
   const [standing, setStanding] = useState<Standing | null>(null)
+  const [tab, setTab] = useState<Tab>('commits')
+  /* Counts the presses a host sent: a host that sends one draws the header, and this page need not. */
+  const [pressed, setPressed] = useState(headerDrawn)
+  const press = useRef<(press: { item: string; value?: string | boolean }) => string | void>(() => 'Nothing is open here.')
 
   const onGoto = useCallback<NonNullable<HostEvents['onGoto']>>((message, answer) => {
     /* A `goto` may name an epic, a step, or a reference. This pane shows git
@@ -163,7 +188,18 @@ export function App() {
     )
   }, [])
 
-  const { where, projectPath, project, kept, remember, resize } = useHost<Which>(ID, { onGoto }, { kept: KEPT })
+  const { where, projectPath, project, kept, remember, resize, header } = useHost<Which>(
+    ID,
+    {
+      onGoto,
+      onPress: (pressing) => {
+        rememberHeaderDrawn()
+        setPressed(true)
+        return press.current(pressing)
+      },
+    },
+    { kept: KEPT },
+  )
   /* How this page's own server last answered: `down` when nothing did, `stale` when it has restarted under this page. */
   const server = useServerStanding()
   const [again, setAgain] = useState(0)
@@ -349,11 +385,45 @@ export function App() {
           })
         }
         shown={shown}
+        tab={tab}
       />
     ) : null
 
+  /* ---- The header: what the host draws in the container's own row ------- */
+  const two = !cover && Boolean(both) && !both?.nowhere && !one
+  const items = headerOf({
+    tab: !cover && reading?.present ? tab : null,
+    uncommitted: reading?.dirty.length ?? 0,
+    repository: two ? which : null,
+  })
+  /* Declared again when the list is a different list, and never otherwise: a commit message being typed changes none of it. */
+  const itemsKey = JSON.stringify(items)
+  useEffect(() => {
+    header(items)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [header, itemsKey])
+  useEffect(() => () => header([]), [header])
+
+  press.current = ({ item, value }) => {
+    if (item === 'tab') {
+      if (value !== 'commits' && value !== 'uncommitted') return 'Show is Commits or Uncommitted.'
+      setTab(value)
+      return
+    }
+    if (item === 'repo') {
+      if (!two) return 'There is one repository here, so there is nothing to choose between.'
+      if (value !== 'project' && value !== 'kehikot') return 'Repository is Project or .kehikot.'
+      pick(value)
+      return
+    }
+    return `Nothing here is called ${item}.`
+  }
+  /* Drawn by the page itself where nobody frames it, or no host has pressed one of these items yet. */
+  const fallback = where !== 'hosted' || !pressed
+
   return (
-    <div ref={shell} className="flex min-w-0 flex-col gap-2 p-2 text-foreground">
+    <div ref={shell} className="relative flex min-w-0 flex-col gap-2 p-2 text-foreground">
+      {fallback ? <HeaderFallback items={items} onPress={(p) => void press.current(p)} className="absolute top-0 right-0" /> : null}
       {framed ? null : (
         <header>
           <h1 className="text-sm font-semibold">History</h1>
@@ -366,8 +436,6 @@ export function App() {
           </p>
         </header>
       )}
-
-      {!cover && both && !both.nowhere && !one ? <Pick which={which} onPick={pick} /> : null}
 
       {/*
         Where the repository is, and ONLY when that is a question.

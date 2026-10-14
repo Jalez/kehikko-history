@@ -1,13 +1,11 @@
-import { FileDiff, History as HistoryIcon } from 'lucide-react'
-import { useState } from 'react'
-
 import { Badge } from '@/components/ui/badge.tsx'
 import { Button } from '@/components/ui/button.tsx'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.tsx'
+import { Tabs, TabsContent } from '@/components/ui/tabs.tsx'
 import { Commits } from '@/view/commits.tsx'
 import { Head } from '@/view/head.tsx'
 import { Uncommitted } from '@/view/uncommitted.tsx'
-import type { At, Dirty, Reading, Standing, Which } from '@/store/ask.ts'
+import type { At, Dirty, Reading, Standing } from '@/store/ask.ts'
+import type { Tab } from '@/view/header.ts'
 
 /**
  * One repository, drawn: the branch row, then two tabs that are two halves of
@@ -55,6 +53,7 @@ export function History({
   onRestore,
   onShow,
   shown,
+  tab,
 }: {
   reading: Reading
   /** How the committer stands, for the data repository. Null for the project's, which nothing commits to on its own. */
@@ -77,8 +76,9 @@ export function History({
   onShow: (commit: string) => void
   /** The text of a commit somebody opened, keyed by object name. */
   shown: { sha: string; text: string } | null
+  /** Which half is in front. The page's header switches it (`header.ts`); there is no strip of tabs here. */
+  tab: Tab
 }) {
-  const [tab, setTab] = useState<'commits' | 'uncommitted'>('commits')
 
   const data = reading.which === 'kehikot'
 
@@ -161,35 +161,7 @@ export function History({
         </p>
       ) : null}
 
-      <Tabs value={tab} onValueChange={(next) => setTab(next === 'uncommitted' ? 'uncommitted' : 'commits')}>
-        {/* Under 320 pixels the tabs are icons, and the count stays.
-            `Uncommitted (4)` at the tab's 12-pixel font is 104 pixels wide,
-            which is exactly what a trigger gets at 220 — `(12)` was already
-            past it, and a nowrap label past its trigger draws over its
-            neighbour. The accessible name is an explicit `aria-label` that
-            is the same words at every width, so a tab is `Uncommitted (4)`
-            to a screen reader and to a test whether it is drawn as the words
-            or as an icon and a number; `title` gives the words on hover.
-            (The name was first left to the content, with the words `sr-only`
-            when small — and a name assembled from three inline pieces came
-            out with spaces in it in the harness. An explicit name is one
-            string in one place.) The icons are hidden outright from 320 up. */}
-        <TabsList aria-label="Committed and uncommitted">
-          <TabsTrigger value="commits" aria-label="Commits" title="Commits">
-            <HistoryIcon aria-hidden="true" className="size-3.5 @xs/pane:hidden" />
-            <span className="hidden @xs/pane:inline">Commits</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="uncommitted"
-            data-count={reading.dirty.length}
-            aria-label={`Uncommitted (${reading.dirty.length})`}
-            title={`Uncommitted (${reading.dirty.length})`}
-          >
-            <FileDiff aria-hidden="true" className="size-3.5 @xs/pane:hidden" />
-            <span className="hidden @xs/pane:inline">Uncommitted ({reading.dirty.length})</span>
-            <span className="@xs/pane:hidden">{reading.dirty.length}</span>
-          </TabsTrigger>
-        </TabsList>
+      <Tabs value={tab}>
         <TabsContent value="commits">
           <Commits reading={reading} busy={busy} onMove={onMove} onRestore={onRestore} onShow={onShow} shown={shown} />
         </TabsContent>
@@ -204,38 +176,5 @@ export function History({
         </p>
       ) : null}
     </section>
-  )
-}
-
-/**
- * The repository chooser, for the case where there are two.
- *
- * Drawn only when `.kehikot` is — or could be — a repository of its own, and
- * deliberately not drawn like the tabs under it: a captioned pair of outline
- * buttons rather than a tab strip, so that it reads as "which history" while
- * the tabs read as "which half of it". Two rows of tabs that look the same
- * would be the confusion this replaced, one row further up.
- */
-export function Pick({ which, onPick }: { which: Which; onPick: (next: Which) => void }) {
-  return (
-    <div className="flex min-w-0 items-center gap-1">
-      <span className="shrink-0 text-[0.6rem] leading-4 text-muted-foreground">Repository</span>
-      <div role="radiogroup" aria-label="Which repository" className="flex min-w-0 flex-1 gap-0.5">
-        {(['project', 'kehikot'] as const).map((one) => (
-          <Button
-            key={one}
-            type="button"
-            role="radio"
-            aria-checked={which === one}
-            size="pane"
-            variant={which === one ? 'default' : 'outline'}
-            className="min-w-0 flex-1"
-            onClick={() => onPick(one)}
-          >
-            {one === 'project' ? 'Project' : '.kehikot'}
-          </Button>
-        ))}
-      </div>
-    </div>
   )
 }
