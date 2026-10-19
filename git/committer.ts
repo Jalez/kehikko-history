@@ -1,5 +1,7 @@
-import { mkdirSync, readFileSync, rmSync, watch, writeFileSync, type FSWatcher } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, watch, writeFileSync, type FSWatcher } from 'node:fs'
 import { join } from 'node:path'
+
+import { readProjectFile } from 'kehikot-module-protocol'
 
 import { commitInto, saying, surrounding, type Stance } from './enclosing.ts'
 import { commitMessage, type FileChange } from './describe.ts'
@@ -275,6 +277,19 @@ class Committer {
   private stopped = false
 
   standing: Standing
+  /** The host's id for this project (`.kehikot/project.json`) when it had one at start, else null. */
+  id: string | null = null
+
+  /** The project folder this one is committing for. */
+  get project(): string {
+    return this.where.project
+  }
+
+  /** Whether its folder is gone, or is now some other project's. */
+  get stale(): boolean {
+    if (!existsSync(this.where.kehikot)) return true
+    return this.id !== null && projectIdAt(this.where.project) !== this.id
+  }
 
   constructor(where: Where, git: GitRunner, quietMs: number, mostMs: number) {
     this.where = where
@@ -379,6 +394,11 @@ class Committer {
 
   private async maybe(): Promise<void> {
     if (this.stopped || this.running) return
+    if (this.stale) {
+      /* The project was renamed or moved away from under this watcher. */
+      sweep()
+      return
+    }
     if (!this.standing.committing) return
     if (!this.clock.due(Date.now())) return
     this.running = true
@@ -455,7 +475,55 @@ function readOr(path: string): string | null {
  * One per project, and no more
  * ------------------------------------------------------------------ */
 
+/**
+ * Keyed by the host's project id when `.kehikot/project.json` has one, so a
+ * rename or move keeps ONE committer per project; by realpath otherwise.
+ */
 const running = new Map<string, Committer>()
+
+/** The id in `<project>/.kehikot/project.json`, or null. */
+function projectIdAt(project: string): string | null {
+  try {
+    const read = readProjectFile(JSON.parse(readFileSync(join(project, '.kehikot', 'project.json'), 'utf8')))
+    return read ? read.id : null
+  } catch {
+    return null
+  }
+}
+
+function keyFor(project: string, id: string | null): string {
+  return id === null ? `path:${project}` : `id:${id}`
+}
+
+/**
+ * Stop and forget every committer whose folder is gone, or is now another
+ * project's (a new folder made at an old path). Closes the watcher and clears
+ * the interval, so a renamed project leaves nothing running behind it.
+ */
+export function sweep(): void {
+  for (const [key, one] of [...running]) {
+    if (!one.stale) continue
+    running.delete(key)
+    one.stop()
+  }
+}
+
+/** The running committer for a located project, after a sweep. */
+function find(project: string): { key: string; id: string | null; one: Committer | undefined } {
+  sweep()
+  const id = projectIdAt(project)
+  const byId = id === null ? undefined : running.get(`id:${id}`)
+  /* A copy of a project carries its id; two live folders are two projects here. */
+  if (byId && byId.project === project) return { key: `id:${id}`, id, one: byId }
+  const byPath = running.get(`path:${project}`)
+  if (byPath) return { key: `path:${project}`, id: null, one: byPath }
+  return { key: byId ? `path:${project}` : keyFor(project, id), id: byId ? null : id, one: undefined }
+}
+
+/** How many committers are running, for tests. */
+export function runningCount(): number {
+  return running.size
+}
 
 /** What one look at a project found, without having changed anything to find it. */
 export interface Look {
@@ -531,8 +599,7 @@ export async function watching(
   if (found.ok === null) return { ok: false, why: null, standing: null, created: false, at: 'waiting' }
   if (found.ok === false) return { ok: false, why: found.why, standing: null, created: false, at: 'refused' }
 
-  const key = found.where.project
-  const already = running.get(key)
+  const { key, id, one: already } = find(found.where.project)
   if (already) {
     return {
       ok: already.standing.committing,
@@ -544,6 +611,7 @@ export async function watching(
   }
 
   const one = new Committer(found.where, git, quietMs, mostMs)
+  one.id = id
   running.set(key, one)
   const made = await one.start(asked)
   if (!made.ok) {
@@ -567,7 +635,7 @@ export async function watching(
 export function standing(projectPath: string | null): Standing | null {
   const found = locate(projectPath)
   if (found.ok !== true) return null
-  return running.get(found.where.project)?.standing ?? null
+  return find(found.where.project).one?.standing ?? null
 }
 
 /**
@@ -643,7 +711,7 @@ export async function commitNow(
   if (!started.standing.committing) {
     return { ok: false, said: started.standing.why ?? 'This process is not the committer for that folder.', sha: null }
   }
-  const one = running.get(found.where.project)
+  const one = find(found.where.project).one
   if (!one) return { ok: false, said: 'Nothing is watching that folder.', sha: null }
 
   const done = await one.commitNow(message)
