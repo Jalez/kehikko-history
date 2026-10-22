@@ -1,6 +1,6 @@
 {
   "name": "kehikko-history",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "type": "module",
   "description": "Version control for the two histories a project actually has: its own repository, and the .kehikot folder the modules keep their data in. One repo for the whole folder, one process committing, commits written automatically a few seconds after a burst of edits with a message that says what changed.",

@@ -129,6 +129,10 @@ export const MANIFEST: Manifest = manifestSchema.parse({
   protocol: PROTOCOL,
   id: ID,
   name: 'History',
+  /* The icon a host draws beside the name: a key of the protocol's module icons, never a path
+     or URL. The mark of the tool this module fronts, which identifies that tool and nothing
+     else; the same key Kehikot's official list gives it. */
+  icon: 'brand:git',
   version: VERSION,
   /* Bounded at 200 by the protocol, and the parse above is what says so — this
      line was 260 characters when it was first written, and the schema refused it
