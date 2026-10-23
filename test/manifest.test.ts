@@ -154,9 +154,9 @@ describe('the registration this module ships', () => {
     expect(source).toContain('fileURLToPath(import.meta.url)')
   })
 
-  test('there is no index.html and no build script', () => {
+  test('there is no index.html, and the build is the protocol\'s buildModule', () => {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> }
-    expect(pkg.scripts.build).toBeUndefined()
+    expect(pkg.scripts.build).toBe('bun run build.ts')
     expect(() => readFileSync(join(root, 'index.html'), 'utf8')).toThrow()
   })
 })
