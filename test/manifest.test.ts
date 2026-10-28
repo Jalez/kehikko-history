@@ -85,17 +85,18 @@ describe('the two declarations that decide whether this is safe', () => {
   })
 })
 
-describe('the mode is global, and the argument is in the file', () => {
-  test('one mode, global-scoped', () => {
+describe('the scope is the project, and the argument is in the file', () => {
+  test('one mode, at project, saying what it shows there (protocol 2.29.0)', () => {
     expect(MANIFEST.modes).toHaveLength(1)
     expect(MANIFEST.modes[0]?.id).toBe('history')
-    expect(MANIFEST.modes[0]?.scope).toBe('global')
+    expect(MANIFEST.modes[0]?.scope).toBe('project')
+    expect(MANIFEST.modes[0]?.scopeSays).toContain('this project')
   })
 
   test('the reason is written down beside it rather than left to be rediscovered', () => {
     const source = readFileSync(join(root, 'manifest.ts'), 'utf8')
-    expect(source).toContain("scope: 'global'")
-    expect(source).toContain("A history's subject does not")
+    expect(source).toContain("scope: 'project'")
+    expect(source).toContain("A history's subject is the project")
   })
 })
 
