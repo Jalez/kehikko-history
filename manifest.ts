@@ -52,26 +52,14 @@ export const PREFERRED_PORT = 7960
  * property that makes it safe — `git clean -xdf` in the parent SKIPS a nested
  * repository — and for the one flag that does not.
  *
- * ## `scope: 'global'`, and the argument for it
+ * ## `scope: 'project'`, and the argument for it
  *
- * Every other module in this workspace declares `scope: 'epic'`, so this is the
- * odd one and it should say why rather than look like a typo.
- *
- * An epic-scoped mode gets a tab that FOLLOWS THE READER: the host tells it
- * which epic is open and tells it again on every switch. That is exactly right
- * for a checklist held against a paper, or questions anchored to a passage —
- * their subject moves when the reader moves.
- *
- * A history's subject does not. There is one `.kehikot` repository per project
- * and one project repository per project, and neither of them changes because
- * somebody clicked a different epic. A tab that re-pointed itself on every epic
- * switch would be re-pointing at the same two repositories, which is a promise
- * of relevance this module cannot keep — and a reader who saw the tab move would
- * reasonably conclude the commits below it had moved too. They have not.
- *
- * The thing this module DOES follow is the project, and `projectPath` arrives in
- * `kehikot.context` for a global mode exactly as it does for an epic one. So
- * nothing is lost by declining the epic: switching project still repaints, which
+ * A history's subject is the project (protocol 2.29.0's `project`, shown as
+ * "Project"): there is one `.kehikot` repository per project and one project
+ * repository per project, and neither of them changes because somebody clicked
+ * a different epic. Until 2.29.0 this module said `global`, the only word there
+ * was for "not the epic"; a host sent it the context anyway, and the thing it
+ * follows, `projectPath`, arrives there. Switching project still repaints, which
  * is the only switch that means anything here.
  *
  * ## What it declares
@@ -167,7 +155,10 @@ export const MANIFEST: Manifest = manifestSchema.parse({
     + 'makes. `show_commit` reads one commit in full, `restore_file` brings one file back. There is deliberately no '
     + 'tool here that switches branches or moves HEAD: doing that under a running agent loses somebody an afternoon.',
   entry: '/app',
-  modes: [{ id: 'history', label: 'History', scope: 'global' }],
+  /* What its content belongs to (protocol 2.29.0): one mode per scope, the default first. */
+  modes: [
+    { id: 'history', label: 'History', scope: 'project', scopeSays: 'the git history of this project and its .kehikot folder, whatever epic is open' },
+  ],
   mcp: {
     url: '/mcp',
     transport: 'http',
