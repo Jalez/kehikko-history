@@ -911,6 +911,43 @@ describe('under 320 pixels the pane says the same things in fewer letters', () =
   })
 })
 
+/**
+ * An `EventSource` with no socket: it opens, hands over the server's opening news (on a microtask,
+ * not a timer), and lets a test send more. The page's stream (`ask.changes`) is the only one here.
+ */
+class FakeEventSource {
+  static all: FakeEventSource[] = []
+  readyState = 0
+  onopen: (() => void) | null = null
+  onmessage: ((message: { data: string }) => void) | null = null
+  onerror: (() => void) | null = null
+  constructor(readonly url: string) {
+    FakeEventSource.all.push(this)
+    void Promise.resolve().then(() => {
+      if (this.readyState === 2) return
+      this.readyState = 1
+      this.onopen?.()
+      this.send()
+    })
+  }
+  send(data: unknown = { changed: true }) {
+    if (this.readyState === 1) this.onmessage?.({ data: JSON.stringify(data) })
+  }
+  addEventListener() {}
+  close() {
+    this.readyState = 2
+    FakeEventSource.all.splice(FakeEventSource.all.indexOf(this), 1)
+  }
+}
+const realEventSource = (globalThis as { EventSource?: unknown }).EventSource
+beforeEach(() => {
+  ;(globalThis as { EventSource?: unknown }).EventSource = FakeEventSource
+})
+afterEach(() => {
+  ;(globalThis as { EventSource?: unknown }).EventSource = realEventSource
+  FakeEventSource.all = []
+})
+
 describe('the not-ready moments, each as the one shared cover', () => {
   const realFetch = globalThis.fetch
   const nowhere = { nowhere: true, trouble: null, standing: null, project: null, kehikot: null, at: 'waiting', said: null, path: null }
@@ -1001,5 +1038,56 @@ describe('the not-ready moments, each as the one shared cover', () => {
     expect(KEPT.read('something-older')).toBeNull()
     expect(KEPT.read(null)).toBeNull()
     expect(KEPT.write('project')).toBe('project')
+  })
+})
+
+describe('the page is told, never asks on a clock', () => {
+  const realFetch = globalThis.fetch
+  afterEach(() => {
+    globalThis.fetch = realFetch
+  })
+
+  test('it reads once as the stream opens, sets no interval, and reads again only when the server says so', async () => {
+    const both = {
+      nowhere: false, trouble: null, standing: null, at: 'elsewhere', said: null, path: '/p/.kehikot',
+      project: { which: 'project', present: true, root: '/p', head: { branch: 'main', detached: false, sha: 'a'.repeat(40) }, branches: [{ name: 'main', current: true }], commits: [], dirty: [], remote: null, trouble: null, absent: null },
+      kehikot: null,
+    }
+    const reads: string[] = []
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/histories')) reads.push(url)
+      return new Response(JSON.stringify(url.includes('/api/watch') ? { ok: false, why: null, standing: null, created: false, at: 'elsewhere' } : both), { status: 200 })
+    }) as unknown as typeof fetch
+    const realInterval = globalThis.setInterval
+    const delays: number[] = []
+    globalThis.setInterval = ((handler: TimerHandler, ms?: number, ...rest: unknown[]) => (delays.push(ms ?? 0), realInterval(handler, ms, ...rest))) as typeof setInterval
+    try {
+      render(<App />)
+      await act(async () => {
+        window.postMessage({ type: 'kehikot.hello', protocol: 2, session: 's', state: null, context: { epic: null, theme: 'dark', project: 'p', projectPath: '/p' } }, '*')
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      })
+      expect(delays).toEqual([])
+      const stream = FakeEventSource.all.find((one) => one.url.includes('/api/histories/events'))
+      expect(stream?.url).toContain('project=%2Fp')
+      const opened = reads.filter((url) => url.includes('project=%2Fp')).length
+      expect(opened).toBe(1)
+
+      /* A while later, with no news, nothing more was asked. */
+      await act(async () => void (await new Promise((resolve) => setTimeout(resolve, 300))))
+      expect(reads.filter((url) => url.includes('project=%2Fp')).length).toBe(opened)
+
+      /* The server says the histories changed: one read. */
+      await act(async () => {
+        stream!.send()
+        await new Promise((resolve) => setTimeout(resolve, 30))
+      })
+      expect(reads.filter((url) => url.includes('project=%2Fp')).length).toBe(opened + 1)
+      cleanup()
+      expect(FakeEventSource.all.filter((one) => one.url.includes('/api/histories/events'))).toHaveLength(0)
+    } finally {
+      globalThis.setInterval = realInterval
+    }
   })
 })

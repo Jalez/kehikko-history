@@ -13,6 +13,10 @@ import { commitPaths, discard, projectRepo, restore, show, stash, switchTo, type
 import { which as readWhich, type Which } from './git/names.ts'
 import { pull, push } from './git/remote.ts'
 import { spawnGit, type GitRunner } from './git/run.ts'
+import { changed } from './live.ts'
+
+/** The page's stream: told when the histories changed, so it never asks on a clock (`live.ts`). */
+export { stream } from './live.ts'
 
 /**
  * Every door this app answers on that is not the page itself.
@@ -499,6 +503,26 @@ export async function answer(
   body: Record<string, unknown> | null,
   ticket: string | null,
   git: GitRunner = spawnGit,
+): Promise<Reply | null> {
+  const reply = await answering(method, path, query, body, ticket, git)
+  /* A write tells a page following the project at once, rather than leaving it to ask (`live.ts`). */
+  if (reply && reply.status < 300 && method === 'POST') {
+    if (path.startsWith('/api/') && path !== '/api/show') changed(project(body?.project))
+    if (path === '/mcp' && body?.method === 'tools/call') {
+      const params = body.params as { name?: unknown; arguments?: Record<string, unknown> } | undefined
+      if (params?.name === 'record' || params?.name === 'restore_file') changed(project(doorContext(params.arguments ?? {}).project))
+    }
+  }
+  return reply
+}
+
+async function answering(
+  method: string,
+  path: string,
+  query: URLSearchParams,
+  body: Record<string, unknown> | null,
+  ticket: string | null,
+  git: GitRunner,
 ): Promise<Reply | null> {
   /*
    * The health check answers about the PROGRAM and counts nothing.

@@ -8,6 +8,7 @@ import { commitMessage, type FileChange } from './describe.ts'
 import { atHead, commit, ensure, locate, read, staged, stageAll, type At, type Ensured, type Where } from './repo.ts'
 import type { GitRunner } from './run.ts'
 import { spawnGit } from './run.ts'
+import { changed } from '../live.ts'
 
 /**
  * The thing that actually makes the commits: a watcher, a debounce, and exactly
@@ -410,6 +411,8 @@ class Committer {
         last: done.ok ? { subject: done.subject, sha: done.sha, at: new Date().toISOString() } : this.standing.last,
         trouble: done.ok || done.nothing ? null : done.why,
       }
+      /* A page following this project is told, rather than left to ask (`live.ts`). */
+      if (!done.nothing) changed(this.where.project)
     } finally {
       this.running = false
     }

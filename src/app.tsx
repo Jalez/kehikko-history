@@ -66,19 +66,6 @@ import { History } from '@/view/history.tsx'
 const framed = typeof window !== 'undefined' && window.parent !== window
 
 /**
- * How often the pane re-reads both histories.
- *
- * The commits this module makes happen in the SERVER process, on a file watcher
- * the page never sees, so a page that read once would be a page showing a
- * history that stopped growing the moment it loaded — which is the exact failure
- * this module exists to prevent somewhere else. Four seconds is slower than the
- * three-second debounce, so a commit is on screen within a second or two of
- * being made, and it costs one loopback request that usually comes back saying
- * the same thing.
- */
-const REREAD_MS = 4000
-
-/**
  * The one word this module keeps with the host: which of the two histories was in front. Strict —
  * anything else is `null`, so an older version's string gives first-run behaviour rather than a
  * pane silently pointed at a repository nobody chose.
@@ -214,7 +201,7 @@ export function App() {
    * this effect used to be what ran `git init` in two of the user's projects
    * without anybody asking for it. What it does now is start the watcher for a
    * folder somebody has already pressed Start on once, which is a decision that
-   * has been made and does not want re-asking every four seconds.
+   * has been made and does not want re-asking on every load.
    *
    * A refusal is not painted from here either. The read below carries the same
    * situation in `at` and `said`, and `History` draws it in place, next to the
@@ -241,7 +228,15 @@ export function App() {
     }
   }, [projectPath])
 
-  /* Both histories, re-read on a timer. See `REREAD_MS`. */
+  /*
+   * Both histories, read again whenever the server says they changed.
+   *
+   * The commits this module makes happen in the SERVER process, on a file watcher the page never
+   * sees, and a terminal's checkout or an edit in the working tree happens outside both. A page that
+   * read once would show a history that stopped growing the moment it loaded, so the server tells it:
+   * one held stream (`ask.changes`), whose first event is also the first read, and which is closed
+   * while the page is hidden. Nothing here asks on a clock.
+   */
   useEffect(() => {
     let alive = true
     const look = () =>
@@ -255,13 +250,12 @@ export function App() {
         .catch(() => {
           /* Loopback to our own origin, so a failure is this app's own server being gone. `ask`
              has already said so to `useServerStanding`, which is what draws the cover below; the
-             next tick — or Try again — asks again. */
+             stream reopening — or Try again — asks again. */
         })
-    look()
-    const timer = setInterval(look, REREAD_MS)
+    const stop = ask.changes(projectPath, look)
     return () => {
       alive = false
-      clearInterval(timer)
+      stop()
     }
   }, [projectPath, again])
 
@@ -281,9 +275,9 @@ export function App() {
           setTrouble(answer.error)
           setWouldLose(answer.wouldLose ?? [])
         }
-        /* Re-read straight away rather than waiting for the timer: a press that
-           worked and a pane that still shows the old state for four seconds
-           reads as a press that did nothing. */
+        /* Re-read straight away rather than waiting for the stream's news: a
+           press that worked and a pane that still shows the old state for a
+           moment reads as a press that did nothing. */
         const again = await ask.histories(projectPath)
         setBoth(again)
         setStanding(again.standing)

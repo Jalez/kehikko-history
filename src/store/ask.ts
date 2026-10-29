@@ -1,4 +1,4 @@
-import { answered, ask, replied } from 'kehikot-module-protocol/client'
+import { answered, ask, replied, subscribe } from 'kehikot-module-protocol/client'
 
 import type { Both } from '../../doors.ts'
 import type { Standing } from '../../git/committer.ts'
@@ -61,6 +61,16 @@ async function post(path: string, body: Record<string, unknown>): Promise<Said> 
  */
 export async function histories(projectPath: string | null): Promise<Both> {
   return answered(await ask<Both>('/api/histories', { query: { project: projectPath || null } }))
+}
+
+/**
+ * Hear when a project's histories changed: once as the stream opens (and again each time it reopens,
+ * after a drop or when the page is shown again), then at every change the server sees — a commit it
+ * made, a press, an agent's tool, a terminal's checkout or a file edited in the working tree. Never
+ * on a clock, and nothing at all while the page is hidden. Returns the function that stops it.
+ */
+export function changes(projectPath: string | null, onChange: () => void): () => void {
+  return subscribe('/api/histories/events', () => onChange(), { query: { project: projectPath || null }, probe: true })
 }
 
 export interface Started {
