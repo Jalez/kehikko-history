@@ -10,7 +10,9 @@ import { Button } from '@/components/ui/button.tsx'
 import * as ask from '@/store/ask.ts'
 import type { Both, Said, Standing, Which } from '@/store/ask.ts'
 import { fallbackShows, HeaderFallback, headerDrawn, rememberHeaderDrawn } from '@/view/header-fallback.tsx'
+import { FOOT, footerItems } from '@/view/footer.ts'
 import { headerOf, type Tab } from '@/view/header.ts'
+import { pullControl, pushControl } from '@/view/upstream.ts'
 import { History } from '@/view/history.tsx'
 
 /**
@@ -156,7 +158,7 @@ export function App() {
     )
   }, [])
 
-  const { where, projectPath, project, kept, remember, resize, header, drawsHeader } = useHost<Which>(
+  const { where, projectPath, project, kept, remember, resize, header, drawsHeader, footer, drawsFooter } = useHost<Which>(
     ID,
     {
       onGoto,
@@ -311,6 +313,26 @@ export function App() {
   const cover: CoverState | null =
     coverFor({ where, projectPath, server }) ?? (!both ? 'loading' : both.nowhere ? 'no-project' : null)
 
+  /*
+   * The footer the host draws, when it draws one (2.38.0): the branch and commit, what is
+   * uncommitted, Push and Pull beside the counts they act on, and what the last press said. The
+   * page's branch row then keeps only the branch picker, and no banner is drawn. An older host draws
+   * no footer, and the page is as it was.
+   */
+  const footed = where === 'hosted' && drawsFooter === true
+  const footerSaid = footed
+    ? JSON.stringify(
+        !cover && reading?.present && !both?.trouble
+          ? footerItems({ reading, busy, said: trouble ? { kind: 'failed', text: trouble } : said ? { kind: 'done', text: said } : null })
+          : !cover && both?.trouble
+            ? [{ kind: 'text', id: 'trouble', text: both.trouble.replace(/\s+/g, ' ').slice(0, 120), level: 'critical' }]
+            : [],
+      )
+    : null
+  useEffect(() => {
+    if (footerSaid) footer(JSON.parse(footerSaid))
+  }, [footer, footerSaid])
+
   const screen =
     both?.trouble ? (
       <p className="rounded border border-failed/40 bg-failed/5 px-2 py-1.5 text-[0.7rem] leading-4 text-failed">
@@ -361,6 +383,7 @@ export function App() {
         }
         shown={shown}
         tab={tab}
+        footed={footed}
       />
     ) : null
 
@@ -370,6 +393,7 @@ export function App() {
     tab: !cover && reading?.present ? tab : null,
     uncommitted: reading?.dirty.length ?? 0,
     repository: two ? which : null,
+    footed,
   })
   /* Declared again when the list is a different list, and never otherwise: a commit message being typed changes none of it. */
   const itemsKey = JSON.stringify(items)
@@ -383,6 +407,20 @@ export function App() {
     if (item === 'tab') {
       if (value !== 'commits' && value !== 'uncommitted') return 'Show is Commits or Uncommitted.'
       setTab(value)
+      return
+    }
+    if (item === FOOT.PUSH) {
+      if (!reading) return 'There is no repository here.'
+      const control = pushControl(reading)
+      if (!control.on) return control.reason
+      void act((path) => ask.push(path, facing))
+      return
+    }
+    if (item === FOOT.PULL) {
+      if (!reading) return 'There is no repository here.'
+      const control = pullControl(reading)
+      if (!control.on) return control.reason
+      void act((path) => ask.pull(path, facing))
       return
     }
     if (item === 'repo') {
@@ -429,13 +467,13 @@ export function App() {
         <p className="min-w-0 text-[0.6rem] leading-4 text-muted-foreground [overflow-wrap:anywhere]">{reading.root}</p>
       ) : null}
 
-      {said ? (
+      {said && !footed ? (
         <Banner kind="done" onClose={() => setSaid(null)}>
           <p className="min-w-0 whitespace-pre-line [overflow-wrap:anywhere]">{said}</p>
         </Banner>
       ) : null}
 
-      {trouble ? (
+      {trouble && (!footed || wouldLose.length) ? (
         <Banner
           kind="failed"
           onClose={() => {
