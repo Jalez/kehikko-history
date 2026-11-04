@@ -25,6 +25,8 @@ export interface HeaderState {
   uncommitted: number
   /** Which history is in front, when there are two to choose between; null when there is one. */
   repository: Which | null
+  /** The host draws the footer, which says how many are uncommitted: the option then says no count. */
+  footed?: boolean
 }
 
 export function headerOf(state: HeaderState): HeaderItemInput[] {
@@ -40,7 +42,7 @@ export function headerOf(state: HeaderState): HeaderItemInput[] {
       value: state.tab,
       options: [
         { id: 'commits', label: 'Commits' },
-        { id: 'uncommitted', label: `Uncommitted (${state.uncommitted})`.slice(0, LIMITS.HEADER_LABEL) },
+        { id: 'uncommitted', label: (state.footed ? 'Uncommitted' : `Uncommitted (${state.uncommitted})`).slice(0, LIMITS.HEADER_LABEL) },
       ],
     })
   }

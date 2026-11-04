@@ -54,6 +54,7 @@ export function History({
   onShow,
   shown,
   tab,
+  footed = false,
 }: {
   reading: Reading
   /** How the committer stands, for the data repository. Null for the project's, which nothing commits to on its own. */
@@ -78,6 +79,8 @@ export function History({
   shown: { sha: string; text: string } | null
   /** Which half is in front. The page's header switches it (`header.ts`); there is no strip of tabs here. */
   tab: Tab
+  /** The host draws the footer, which carries the commit and Push / Pull (`footer.ts`): the branch row drops them. */
+  footed?: boolean
 }) {
 
   const data = reading.which === 'kehikot'
@@ -133,7 +136,7 @@ export function History({
 
   return (
     <section className="flex min-w-0 flex-col gap-2">
-      <Head reading={reading} busy={busy} onMove={onMove} onPush={onPush} onPull={onPull} />
+      <Head reading={reading} busy={busy} onMove={onMove} onPush={onPush} onPull={onPull} footed={footed} />
 
       {reading.head.detached ? (
         <p className="rounded border border-detached/40 bg-detached/5 px-2 py-1.5 text-[0.65rem] leading-4 text-detached">
