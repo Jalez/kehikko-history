@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import type { HostEvents } from 'kehikot-module-protocol/client'
-import { Cover, coverFor, useHost, useServerStanding, type CoverState, type KeptCodec } from 'kehikot-module-protocol/client/react'
+import { Cover, coverFor, useHost, useKept, useServerStanding, type CoverState, type KeptCodec } from 'kehikot-module-protocol/client/react'
 
 import { ID } from '../manifest.ts'
 
@@ -46,7 +46,10 @@ import { History } from '@/view/history.tsx'
  *
  * ## Which one is in front is remembered
  *
- * One word, kept by the host, unkeyed by canvas — see `use-kehikot.ts`. A
+ * With the tab in front, kept by the host for this container — this module on
+ * this kehikko — so the same History on two kehikot keeps two views, and each is
+ * back after the app restarts. It is read on every render, never copied once: the
+ * same page serves every kehikko, and moving to another one brings its value. A
  * remembered `kehikot` on a project that turns out to have one repository is
  * simply overridden: there is no second repository to remember.
  *
@@ -67,14 +70,36 @@ import { History } from '@/view/history.tsx'
  */
 const framed = typeof window !== 'undefined' && window.parent !== window
 
+/** What this module keeps with the host: which of the two histories was in front, and which tab. */
+export interface Kept {
+  repo?: Which
+  tab?: Tab
+}
+
+const isWhich = (value: unknown): value is Which => value === 'project' || value === 'kehikot'
+const isTab = (value: unknown): value is Tab => value === 'commits' || value === 'uncommitted'
+
 /**
- * The one word this module keeps with the host: which of the two histories was in front. Strict —
- * anything else is `null`, so an older version's string gives first-run behaviour rather than a
- * pane silently pointed at a repository nobody chose.
+ * The kept string: a JSON object, one key per field. Strict — a field that is not one of its
+ * options is dropped, so an older version's string gives first-run behaviour rather than a pane
+ * silently pointed at a repository nobody chose. The one bare word an earlier version kept
+ * (`project` or `kehikot`) still reads, as the repository.
  */
-export const KEPT: KeptCodec<Which> = {
-  read: (state) => (state === 'project' || state === 'kehikot' ? state : null),
-  write: (which) => which,
+export const KEPT: KeptCodec<Kept> = {
+  read: (state) => {
+    if (isWhich(state)) return { repo: state }
+    if (!state) return null
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(state)
+    } catch {
+      return null
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
+    const { repo, tab } = parsed as Record<string, unknown>
+    return { ...(isWhich(repo) ? { repo } : {}), ...(isTab(tab) ? { tab } : {}) }
+  },
+  write: (kept) => JSON.stringify(kept),
 }
 
 /**
@@ -133,14 +158,12 @@ export function Banner({ kind, children, onClose }: { kind: 'done' | 'failed'; c
 
 export function App() {
   const [both, setBoth] = useState<Both | null>(null)
-  const [which, setWhich] = useState<Which>('kehikot')
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
   const [trouble, setTrouble] = useState<string | null>(null)
   const [wouldLose, setWouldLose] = useState<string[]>([])
   const [shown, setShown] = useState<{ sha: string; text: string } | null>(null)
   const [standing, setStanding] = useState<Standing | null>(null)
-  const [tab, setTab] = useState<Tab>('commits')
   /* Counts the presses a host sent: a host that sends one draws the header, and this page need not. */
   const [pressed, setPressed] = useState(headerDrawn)
   const press = useRef<(press: { item: string; value?: string | boolean }) => string | void>(() => 'Nothing is open here.')
@@ -158,7 +181,7 @@ export function App() {
     )
   }, [])
 
-  const { where, projectPath, project, kept, remember, resize, header, drawsHeader, footer, drawsFooter } = useHost<Which>(
+  const host = useHost<Kept>(
     ID,
     {
       onGoto,
@@ -170,28 +193,20 @@ export function App() {
     },
     { kept: KEPT },
   )
+  const { where, projectPath, project, resize, header, drawsHeader, footer, drawsFooter } = host
+  /* Which history and which tab, kept per container and read on every render. See the essay at the top. */
+  const [which, keepWhich] = useKept<Which>(host, 'repo', 'kehikot', isWhich)
+  const [tab, setTab] = useKept<Tab>(host, 'tab', 'commits', isTab)
   /* How this page's own server last answered: `down` when nothing did, `stale` when it has restarted under this page. */
   const server = useServerStanding()
   const [again, setAgain] = useState(0)
 
-  /* The remembered repository wins whenever there is one, and only ever on
-     arrival — after that this page's own state is the answer. Two answers to
-     "which history am I looking at" with no way to tell them apart is exactly
-     the fault this workspace argues against everywhere else. */
-  const applied = useRef(false)
-  useEffect(() => {
-    if (applied.current || kept === null) return
-    applied.current = true
-    setWhich(kept)
-  }, [kept])
-
   const pick = useCallback(
     (next: Which) => {
-      setWhich(next)
+      keepWhich(next)
       setShown(null)
-      remember(next)
     },
-    [remember],
+    [keepWhich],
   )
 
   /**

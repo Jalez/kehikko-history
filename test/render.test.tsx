@@ -1032,12 +1032,58 @@ describe('the not-ready moments, each as the one shared cover', () => {
     expect(cover()?.getAttribute('data-cover')).not.toBe('down')
   })
 
-  test('the kept word is read strictly', () => {
-    expect(KEPT.read('project')).toBe('project')
-    expect(KEPT.read('kehikot')).toBe('kehikot')
+  test('the kept view is read strictly, and the bare word an earlier version kept still reads', () => {
+    expect(KEPT.read('project')).toEqual({ repo: 'project' })
+    expect(KEPT.read('kehikot')).toEqual({ repo: 'kehikot' })
     expect(KEPT.read('something-older')).toBeNull()
     expect(KEPT.read(null)).toBeNull()
-    expect(KEPT.write('project')).toBe('project')
+    expect(KEPT.read('{"repo":"project","tab":"uncommitted"}')).toEqual({ repo: 'project', tab: 'uncommitted' })
+    expect(KEPT.read('{"repo":"elsewhere","tab":"diff"}')).toEqual({})
+    expect(KEPT.read(KEPT.write({ repo: 'kehikot', tab: 'commits' }))).toEqual({ repo: 'kehikot', tab: 'commits' })
+  })
+
+  test('the tab is restored from what this kehikko kept, a press keeps it, and another kehikko brings its own', async () => {
+    const both = {
+      nowhere: false, trouble: null, standing: null, at: 'elsewhere', said: null, path: '/p/.kehikot',
+      project: { which: 'project', present: true, root: '/p', head: { branch: 'main', detached: false, sha: 'a'.repeat(40) }, branches: [{ name: 'main', current: true }], commits: [], dirty: [], remote: null, trouble: null, absent: null },
+      kehikot: null,
+    }
+    globalThis.fetch = (async () => new Response(JSON.stringify(both), { status: 200 })) as unknown as typeof fetch
+    const sent: { type: string; method?: string; params?: { state?: string; kehikko?: number }; items?: { id: string; value?: string }[] }[] = []
+    let greeter: MessageEventSource | null = null
+    const listen = (event: MessageEvent) => {
+      if (event.data && typeof event.data === 'object' && 'type' in event.data) sent.push(event.data)
+      if (event.data?.type === 'kehikot.hello') greeter = event.source
+    }
+    /* After the greeting a page hears only the window that greeted it, so these say they come from there. */
+    const fromHost = (data: unknown) => window.dispatchEvent(new MessageEvent('message', { data, source: greeter }))
+    const shownTab = () => sent.filter((one) => one.type === 'kehikot.header').at(-1)?.items?.find((one) => one.id === 'tab')?.value
+    window.addEventListener('message', listen)
+    try {
+      render(<App />)
+      await greet({ project: 'p', projectPath: '/p', kehikko: { id: 1, name: 'K1' }, kept: '{"repo":"project","tab":"uncommitted"}' })
+      await settle(60)
+      expect(shownTab()).toBe('uncommitted')
+
+      await act(async () => {
+        fromHost({ type: 'kehikot.press', protocol: 2, id: 'p1', item: 'tab', value: 'commits' })
+        await new Promise((resolve) => setTimeout(resolve, 30))
+      })
+      await settle(400)
+      expect(shownTab()).toBe('commits')
+      const writes = sent.filter((one) => one.type === 'kehikot.request' && one.method === 'state.set').map((one) => one.params)
+      expect(writes.at(-1)?.kehikko).toBe(1)
+      expect(JSON.parse(writes.at(-1)?.state ?? 'null')).toEqual({ repo: 'project', tab: 'commits' })
+
+      await act(async () => {
+        fromHost({ type: 'kehikot.context', protocol: 2, epic: null, theme: 'dark', project: 'p', projectPath: '/p', kehikko: { id: 2, name: 'K2' }, kept: '{"tab":"uncommitted"}' })
+        await new Promise((resolve) => setTimeout(resolve, 30))
+      })
+      await settle(400)
+      expect(shownTab()).toBe('uncommitted')
+    } finally {
+      window.removeEventListener('message', listen)
+    }
   })
 })
 
