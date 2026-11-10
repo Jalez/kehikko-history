@@ -1010,6 +1010,44 @@ describe('the not-ready moments, each as the one shared cover', () => {
     expect(document.querySelectorAll('[data-header-fallback]')).toHaveLength(1)
   })
 
+  test('the first read draws no "Loading…": the host’s cover stands in, and the page says it is drawn once the histories are in', async () => {
+    const both = {
+      nowhere: false, trouble: null, standing: null, at: 'elsewhere', said: null, path: '/p/.kehikot',
+      project: { which: 'project', present: true, root: '/p', head: { branch: 'main', detached: false, sha: 'a'.repeat(40) }, branches: [{ name: 'main', current: true }], commits: [], dirty: [], remote: null, trouble: null, absent: null },
+      kehikot: null,
+    }
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    globalThis.fetch = (async () => {
+      await gate
+      return new Response(JSON.stringify(both), { status: 200 })
+    }) as unknown as typeof fetch
+    let drawn = 0
+    const listen = (event: MessageEvent) => {
+      if (event.data?.type === 'kehikot.drawn') drawn += 1
+    }
+    window.addEventListener('message', listen)
+    try {
+      render(<App />)
+      await greet({ project: 'p', projectPath: '/p' })
+      await settle(30)
+      expect(cover()).toBeNull()
+      expect(document.body.textContent).not.toContain('Loading')
+      expect(drawn).toBe(0)
+      await act(async () => {
+        release()
+        await new Promise((resolve) => setTimeout(resolve, 30))
+      })
+      await settle(30)
+      expect(drawn).toBe(1)
+      await greet({ project: 'p', projectPath: '/p' })
+      await settle(30)
+      expect(drawn).toBe(1)
+    } finally {
+      window.removeEventListener('message', listen)
+    }
+  })
+
   test('hosted with a name and no path: no project, and the detail says a name is not a path', async () => {
     render(<App />)
     await greet({ project: 'thesis_latex', projectPath: null })

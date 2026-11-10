@@ -1,0 +1,326 @@
+[
+  {
+    "name": "commits, one repository, clean",
+    "header": [
+      {
+        "kind": "switch",
+        "id": "tab",
+        "label": "Show",
+        "icon": "history",
+        "agents": true,
+        "value": "commits",
+        "options": [
+          {
+            "id": "commits",
+            "label": "Commits"
+          },
+          {
+            "id": "uncommitted",
+            "label": "Uncommitted"
+          }
+        ]
+      }
+    ],
+    "footer": [
+      {
+        "kind": "text",
+        "id": "branch",
+        "text": "main · aaaaaaa",
+        "level": "normal",
+        "align": "start",
+        "optional": false,
+        "tooltip": "/project, on commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "kind": "text",
+        "id": "dirty",
+        "text": "Clean",
+        "level": "normal",
+        "align": "center",
+        "optional": true
+      },
+      {
+        "kind": "run",
+        "id": "push",
+        "label": "Push",
+        "agents": false,
+        "state": "idle",
+        "result": null,
+        "disabled": "Nothing to push: origin/main already has every commit on main.",
+        "confirm": false,
+        "align": "end",
+        "optional": false,
+        "tooltip": "Nothing to push: origin/main already has every commit on main."
+      },
+      {
+        "kind": "run",
+        "id": "pull",
+        "label": "Pull",
+        "agents": false,
+        "state": "idle",
+        "result": null,
+        "disabled": null,
+        "confirm": false,
+        "align": "end",
+        "optional": false,
+        "tooltip": "Pull origin/main into main — fast-forward only: if both sides have moved it refuses and changes nothing. Nothing new to bring in as of the last fetch, 2m ago."
+      }
+    ],
+    "state": true
+  },
+  {
+    "name": "uncommitted, two repositories, ahead and behind",
+    "header": [
+      {
+        "kind": "switch",
+        "id": "tab",
+        "label": "Show",
+        "icon": "history",
+        "agents": true,
+        "value": "uncommitted",
+        "options": [
+          {
+            "id": "commits",
+            "label": "Commits"
+          },
+          {
+            "id": "uncommitted",
+            "label": "Uncommitted"
+          }
+        ]
+      },
+      {
+        "kind": "switch",
+        "id": "repo",
+        "label": "Repository",
+        "icon": "git-branch",
+        "agents": true,
+        "value": "kehikot",
+        "options": [
+          {
+            "id": "project",
+            "label": "Project"
+          },
+          {
+            "id": "kehikot",
+            "label": ".kehikot"
+          }
+        ]
+      }
+    ],
+    "footer": [
+      {
+        "kind": "text",
+        "id": "branch",
+        "text": "main · aaaaaaa",
+        "level": "normal",
+        "align": "start",
+        "optional": false,
+        "tooltip": "/project/.kehikot, on commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "kind": "text",
+        "id": "dirty",
+        "text": "2 uncommitted",
+        "level": "normal",
+        "align": "center",
+        "optional": true
+      },
+      {
+        "kind": "run",
+        "id": "push",
+        "label": "Push 2",
+        "agents": false,
+        "state": "idle",
+        "result": null,
+        "disabled": null,
+        "confirm": false,
+        "align": "end",
+        "optional": false,
+        "tooltip": "Push 2 commits on main to origin/main. Only a fast-forward: if origin/main has moved, the push is refused and nothing changes."
+      },
+      {
+        "kind": "run",
+        "id": "pull",
+        "label": "Pull 1",
+        "agents": false,
+        "state": "idle",
+        "result": null,
+        "disabled": null,
+        "confirm": false,
+        "align": "end",
+        "optional": false,
+        "tooltip": "Pull origin/main into main — fast-forward only: if both sides have moved it refuses and changes nothing. 1 commit to bring in as of the last fetch, 2m ago. 2 files have uncommitted changes: if bringing those commits in would write over any…"
+      }
+    ],
+    "state": true
+  },
+  {
+    "name": "a push refused",
+    "header": [
+      {
+        "kind": "switch",
+        "id": "tab",
+        "label": "Show",
+        "icon": "history",
+        "agents": true,
+        "value": "commits",
+        "options": [
+          {
+            "id": "commits",
+            "label": "Commits"
+          },
+          {
+            "id": "uncommitted",
+            "label": "Uncommitted"
+          }
+        ]
+      }
+    ],
+    "footer": [
+      {
+        "kind": "text",
+        "id": "branch",
+        "text": "main · aaaaaaa",
+        "level": "normal",
+        "align": "start",
+        "optional": false,
+        "tooltip": "/project, on commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "kind": "text",
+        "id": "dirty",
+        "text": "Clean",
+        "level": "normal",
+        "align": "center",
+        "optional": true
+      },
+      {
+        "kind": "text",
+        "id": "said",
+        "text": "The remote has commits you do not.",
+        "level": "critical",
+        "align": "center",
+        "optional": false,
+        "tooltip": "The remote has commits you do not."
+      },
+      {
+        "kind": "run",
+        "id": "push",
+        "label": "Push 1",
+        "agents": false,
+        "state": "idle",
+        "result": null,
+        "disabled": null,
+        "confirm": false,
+        "align": "end",
+        "optional": false,
+        "tooltip": "Push 1 commit on main to origin/main. Only a fast-forward: if origin/main has moved, the push is refused and nothing changes."
+      },
+      {
+        "kind": "run",
+        "id": "pull",
+        "label": "Pull",
+        "agents": false,
+        "state": "idle",
+        "result": null,
+        "disabled": null,
+        "confirm": false,
+        "align": "end",
+        "optional": false,
+        "tooltip": "Pull origin/main into main — fast-forward only: if both sides have moved it refuses and changes nothing. Nothing new to bring in as of the last fetch, 2m ago."
+      }
+    ],
+    "state": true
+  },
+  {
+    "name": "detached, busy",
+    "header": [
+      {
+        "kind": "switch",
+        "id": "tab",
+        "label": "Show",
+        "icon": "history",
+        "agents": true,
+        "value": "commits",
+        "options": [
+          {
+            "id": "commits",
+            "label": "Commits"
+          },
+          {
+            "id": "uncommitted",
+            "label": "Uncommitted"
+          }
+        ]
+      }
+    ],
+    "footer": [
+      {
+        "kind": "text",
+        "id": "branch",
+        "text": "detached at bbbbbbb",
+        "level": "warn",
+        "align": "start",
+        "optional": false,
+        "tooltip": "HEAD is on a commit rather than a branch. Pick a branch to get back onto one."
+      },
+      {
+        "kind": "text",
+        "id": "dirty",
+        "text": "Clean",
+        "level": "normal",
+        "align": "center",
+        "optional": true
+      },
+      {
+        "kind": "run",
+        "id": "push",
+        "label": "Push",
+        "agents": false,
+        "state": "idle",
+        "result": null,
+        "disabled": "Something is running in this repository; wait for it to finish.",
+        "confirm": false,
+        "align": "end",
+        "optional": false,
+        "tooltip": "Push is off while HEAD is detached — a push sends a branch, and you are on a commit rather than a branch. Pick a branch to get back onto one."
+      },
+      {
+        "kind": "run",
+        "id": "pull",
+        "label": "Pull",
+        "agents": false,
+        "state": "idle",
+        "result": null,
+        "disabled": "Something is running in this repository; wait for it to finish.",
+        "confirm": false,
+        "align": "end",
+        "optional": false,
+        "tooltip": "Pull is off while HEAD is detached — a pull moves a branch forward, and you are on a commit rather than a branch. Pick a branch to get back onto one."
+      }
+    ],
+    "state": true
+  },
+  {
+    "name": "the read failed",
+    "header": [],
+    "footer": [
+      {
+        "kind": "text",
+        "id": "trouble",
+        "text": "git could not read this repository.",
+        "level": "critical",
+        "align": "start",
+        "optional": false,
+        "tooltip": "git could not read this repository."
+      }
+    ],
+    "state": true
+  },
+  {
+    "name": "nothing read yet",
+    "header": [],
+    "footer": []
+  }
+]

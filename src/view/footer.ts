@@ -67,3 +67,8 @@ export function footerItems({ reading, busy, said, now = Date.now() }: FooterSta
   items.push(press(FOOT.PUSH, 'Push', pushControl(reading), busy), press(FOOT.PULL, 'Pull', pullControl(reading, now), busy))
   return footerItemsSchema.parse(items)
 }
+
+/** The footer when the read itself failed: what git said, as one critical line. Pure. */
+export function troubleFooter(trouble: string): FooterItem[] {
+  return footerItemsSchema.parse([{ kind: 'text', id: 'trouble', text: cut(flat(trouble), LIMITS.FOOTER_TEXT), level: 'critical', tooltip: cut(flat(trouble), LIMITS.FOOTER_TOOLTIP) }])
+}

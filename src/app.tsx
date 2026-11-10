@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button.tsx'
 import * as ask from '@/store/ask.ts'
 import type { Both, Said, Standing, Which } from '@/store/ask.ts'
 import { fallbackShows, HeaderFallback, headerDrawn, rememberHeaderDrawn } from '@/view/header-fallback.tsx'
-import { FOOT, footerItems } from '@/view/footer.ts'
+import { FOOT, footerItems, troubleFooter } from '@/view/footer.ts'
 import { headerOf, type Tab } from '@/view/header.ts'
 import { pullControl, pushControl } from '@/view/upstream.ts'
 import { History } from '@/view/history.tsx'
@@ -191,7 +191,9 @@ export function App() {
         return press.current(pressing)
       },
     },
-    { kept: KEPT },
+    /* The tab and the repository are this module's own kept state (`useKept`, below), so the
+       protocol's kept view keeps only the scroll: one mechanism for each thing kept (2.70.0). */
+    { kept: KEPT, keepView: { header: false } },
   )
   const { where, projectPath, project, resize, header, drawsHeader, footer, drawsFooter } = host
   /* Which history and which tab, kept per container and read on every render. See the essay at the top. */
@@ -326,7 +328,23 @@ export function App() {
    * no project and comes back `nowhere`, which is not worth saying for 700 milliseconds.
    */
   const cover: CoverState | null =
-    coverFor({ where, projectPath, server }) ?? (!both ? 'loading' : both.nowhere ? 'no-project' : null)
+    coverFor({ where, projectPath, server }) ?? (both?.nowhere ? 'no-project' : null)
+
+  /*
+   * The host's cover is held until this page says it is drawn (protocol 2.70.0), so the first read
+   * draws no "Loading…" of its own: nothing is drawn until both histories are in, and then the page
+   * says so, once. A cover that is an answer (no project, the server down, nothing framing it) is
+   * drawn too. Never gated on being visible: the host keeps a covered page hidden, and waiting for
+   * it to be shown would hold the cover for the whole timeout.
+   */
+  const drawn = cover ? cover !== 'waiting' && cover !== 'loading' && cover !== 'stale' : both !== null
+  const saidDrawn = useRef(false)
+  const { ready } = host
+  useEffect(() => {
+    if (!drawn || saidDrawn.current) return
+    saidDrawn.current = true
+    ready()
+  }, [drawn, ready])
 
   /*
    * The footer the host draws, when it draws one (2.38.0): the branch and commit, what is
@@ -340,7 +358,7 @@ export function App() {
         !cover && reading?.present && !both?.trouble
           ? footerItems({ reading, busy, said: trouble ? { kind: 'failed', text: trouble } : said ? { kind: 'done', text: said } : null })
           : !cover && both?.trouble
-            ? [{ kind: 'text', id: 'trouble', text: both.trouble.replace(/\s+/g, ' ').slice(0, 120), level: 'critical' }]
+            ? troubleFooter(both.trouble)
             : [],
       )
     : null
