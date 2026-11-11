@@ -228,11 +228,11 @@ checklist: ticked “figures at 300dpi” for gh#105
 learning: 3 questions added on chapters/1_introduction.tex
 ```
 
-The four data modules need no change for this and were not asked for one. The
+The data modules need no change for this and were not asked for one. The
 describer reads their files as ordinary JSON and looks for the shape data has —
 records with ids in a named container — and takes the noun from the container's
 key, which is why it can say "3 questions added" without having heard of the
-Learning module. A tick carries no words at all, so ids are indexed across the
+module that keeps questions. A tick carries no words at all, so ids are indexed across the
 whole file and a change borrows the label of the record with the same id.
 
 **When it cannot describe something, it says something true and dull rather than
@@ -302,14 +302,16 @@ failure is shown on the pane.
 
 ## Derived data stays out of the history
 
-`.kehikot/references/.gitignore` contains `*`, deliberately: that folder is a
-cache rebuilt from GitHub, and a derived cache does not belong in a data history.
+A module that keeps a cache rebuilt from elsewhere says so: in a `.gitignore`
+containing `*` in its own folder, or by declaring the folder `derived` in its
+`module.folders` service. A derived cache does not belong in a data history.
 **Authored data is committed; derived data is not.**
 
-This module does not touch that file and does not maintain a list of exceptions.
-Staging is `git add -A`, and git reads nested ignore files as it descends, so the
-whole of that folder is left out with no help from here. The module that owns a
-derived folder says so in its own `.gitignore`, and git is what reads it.
+This module touches no other module's `.gitignore` and keeps no list of anybody's
+folders. Staging is `git add -A`, git reads nested ignore files as it descends,
+and the folders declared derived (asked of the host through `services.find`) are
+left out by exclude pathspecs. The module that owns a derived folder says so, and
+this reads what it said.
 
 ---
 
@@ -477,7 +479,7 @@ dark   220px  scrollWidth=  220 client=  220  commits=3 armed=true  ok
 
 The trap this module had to survive is that shadcn's `Badge` ships
 `whitespace-nowrap`, and a commit subject is exactly the long unbreakable string
-that pattern cannot handle. Checklist hit this first, with a 407-character
+that pattern cannot handle. Another module hit this first, with a 407-character
 authored string that set an 1187px min-content floor under a 220px pane. Here it
 was measured again at 220px on an ordinary 83-character subject — `learning: a
 question about mode scope, written while reading the background chapter`, which

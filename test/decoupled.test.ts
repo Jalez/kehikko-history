@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
 
 import * as manifest from '../manifest.ts'
 
@@ -40,5 +40,24 @@ describe('no module names another', () => {
       })
       expect(lines.filter((line) => ids.test(line))).toEqual([])
     }
+  })
+
+  test('the code, its comments and the README name no other module, its id or its folder', () => {
+    /* Another module's folder is a `.kehikot/<folder>` path; who owns a folder, and whether it is
+       derived, is read from `module.folders`, never written here. */
+    const folders = new RegExp(`\\.kehikot\\/(${OTHERS.map((n) => n.toLowerCase()).join('|')})\\b`)
+    const SKIP = new Set(['node_modules', 'dist', 'test', 'notes', '.git', '.github'])
+    const walk = (dir: string): string[] => readdirSync(dir).flatMap((one) => {
+      if (SKIP.has(one)) return []
+      const at = join(dir, one)
+      return statSync(at).isDirectory() ? walk(at) : /\.(ts|tsx|json|sh)$/.test(one) && one !== 'bun.lock' ? [at] : []
+    })
+    const hits: string[] = []
+    for (const file of [...walk(ROOT), join(ROOT, 'README.md')]) {
+      readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+        if (names.test(line) || folders.test(line)) hits.push(`${relative(ROOT, file)}:${i + 1}: ${line.trim()}`)
+      })
+    }
+    expect(hits).toEqual([])
   })
 })

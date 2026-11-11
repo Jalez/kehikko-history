@@ -78,7 +78,7 @@ describe('the two declarations that decide whether this is safe', () => {
     /* A capability declared "just in case" is indistinguishable from one that
        works, and is the fastest way to teach somebody to press yes without
        reading. */
-    expect(MANIFEST.declares.uses).toEqual(['state:keep'])
+    expect(MANIFEST.declares.uses).toEqual(['state:keep', 'services:read'])
     expect(MANIFEST.declares.prompt).toBe(false)
     expect(MANIFEST.extensions.emits).toEqual([])
     expect(MANIFEST.extensions.consumes).toEqual([])

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-import { KEHIKOT_DIR, kehikotDir, within } from 'kehikot-module-protocol'
+import { KEHIKOT_DIR, KEHIKOT_FOLDER, kehikotDir, within } from 'kehikot-module-protocol'
 
 import { hooked, mayInit, refusal, saying, type Stance } from './enclosing.ts'
 import { branchName, commitish, message as checkMessage, repoPath, type Which } from './names.ts'
@@ -226,9 +226,9 @@ const DISABLED = '.git.disabled'
  * ## The folder gets a `.gitignore` of its own, and it is nearly empty
  *
  * One line: `.DS_Store`. Not a rule about the modules' data — that is the whole
- * point of the repository. What it must NOT do is touch
- * `.kehikot/references/.gitignore`, which contains `*` deliberately: that folder
- * is a cache rebuilt from GitHub, and a derived cache does not belong in a data
+ * point of the repository. What it must NOT do is touch a `.gitignore` another
+ * module keeps in its own folder: a module that keeps a cache rebuilt from
+ * elsewhere may say so there (`*`), and a derived cache does not belong in a data
  * history. Authored data is committed, derived data is not, and the file saying
  * so was written by the module that owns it. See `stageAll()`.
  *
@@ -600,21 +600,25 @@ export function parseStatus(out: string): Dirty[] {
  * ------------------------------------------------------------------ */
 
 /**
- * Stage everything, honouring every `.gitignore` in the tree.
+ * Stage everything, honouring every `.gitignore` in the tree, except the folders
+ * their owners declare derived.
  *
- * `git add -A` is the whole of it, and the fact worth writing down is what it
- * does NOT add: `.kehikot/references/.gitignore` contains `*`, and `git add`
- * reads nested ignore files as it descends, so the whole of that folder is left
- * out with no help from this module and no list of exceptions to keep current.
+ * `git add -A` is most of it, and the fact worth writing down is what it does
+ * NOT add: a module that keeps a rebuilt cache may put a `.gitignore` containing
+ * `*` in its own folder, and `git add` reads nested ignore files as it descends,
+ * so the whole of that folder is left out with no help from this module.
  *
- * That is the right mechanism as well as the easy one. The alternative —
- * enumerating what to stage — would be this module holding an opinion about
- * which folders are caches, which is an opinion that goes stale the first time a
- * module adds one. The module that owns a derived folder says so in its own
- * `.gitignore`, and git is what reads it.
+ * `derived` is the rest: the folders under `.kehikot/` whose owners declare them
+ * a cache rebuilt from elsewhere (`module.folders`, read in `folders.ts`), each
+ * left out by a literal exclude pathspec. Neither is this module holding an
+ * opinion about which folders are caches — an opinion that goes stale the first
+ * time a module adds one. The module that owns a derived folder says so, in its
+ * own `.gitignore` or its own declaration, and this reads what it said. A name
+ * that is not a plain folder name is never passed to git.
  */
-export async function stageAll(cwd: string, git: GitRunner): Promise<GitResult> {
-  return git(['add', '-A', '--', '.'], { cwd })
+export async function stageAll(cwd: string, git: GitRunner, derived: readonly string[] = []): Promise<GitResult> {
+  const left = derived.filter((one) => KEHIKOT_FOLDER.test(one)).map((one) => `:(exclude,literal)${one}`)
+  return git(['add', '-A', '--', '.', ...left], { cwd })
 }
 
 /** Every file staged for the next commit, with git's own status letter. */

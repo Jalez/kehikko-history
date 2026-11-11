@@ -9,3 +9,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
  * from what it says in a browser.
  */
 GlobalRegistrator.register()
+
+/* No host is asked which folders are derived unless a test says so. */
+import { setKnownDerived } from '../git/folders.ts'
+setKnownDerived([], Number.POSITIVE_INFINITY)

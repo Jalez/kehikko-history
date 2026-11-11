@@ -5,6 +5,8 @@ import { readProjectFile } from 'kehikot-module-protocol'
 
 import { commitInto, saying, surrounding, type Stance } from './enclosing.ts'
 import { commitMessage, type FileChange } from './describe.ts'
+import { knownDerived, lookForDerived } from './folders.ts'
+import { ID } from '../manifest.ts'
 import { atHead, commit, ensure, locate, read, staged, stageAll, type At, type Ensured, type Where } from './repo.ts'
 import type { GitRunner } from './run.ts'
 import { spawnGit } from './run.ts'
@@ -385,7 +387,7 @@ class Committer {
    * would keep the CPU busy and keep the pane saying a commit is pending, which
    * is a lie about the state of somebody's data.
    *
-   * The `.gitignore` inside `references/` is not ignored here; it is left to
+   * A `.gitignore` inside a module's folder is not ignored here; it is left to
    * git, which honours it during `add`. See `stageAll`.
    */
   private ignorable(name: string): boolean {
@@ -429,7 +431,9 @@ class Committer {
    */
   async commitNow(chosen: string | null): Promise<{ ok: boolean; subject: string; sha: string | null; why: string; nothing: boolean }> {
     const cwd = this.where.kehikot
-    const stage = await stageAll(cwd, this.git)
+    /* The folders their owners declare derived are left out: asked of the host, cached, never thrown. */
+    await lookForDerived(ID)
+    const stage = await stageAll(cwd, this.git, knownDerived())
     if (!stage.ok) {
       return { ok: false, subject: '', sha: null, why: (stage.err || stage.out).trim() || 'git could not stage the folder.', nothing: false }
     }
