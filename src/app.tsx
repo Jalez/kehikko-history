@@ -79,6 +79,9 @@ export interface Kept {
 const isWhich = (value: unknown): value is Which => value === 'project' || value === 'kehikot'
 const isTab = (value: unknown): value is Tab => value === 'commits' || value === 'uncommitted'
 
+/** What the host's cover says while this page reads a project's histories (protocol 2.84.0). */
+export const LOADING_HISTORY = 'Loading the history…'
+
 /**
  * The kept string: a JSON object, one key per field. Strict — a field that is not one of its
  * options is dropped, so an older version's string gives first-run behaviour rather than a pane
@@ -158,6 +161,8 @@ export function Banner({ kind, children, onClose }: { kind: 'done' | 'failed'; c
 
 export function App() {
   const [both, setBoth] = useState<Both | null>(null)
+  /* The project `both` was read for: another one is a switch still being read (protocol 2.84.0). */
+  const [bothFor, setBothFor] = useState<string | null | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
   const [trouble, setTrouble] = useState<string | null>(null)
@@ -264,6 +269,7 @@ export function App() {
         .then((answer) => {
           if (!alive) return
           setBoth(answer)
+          setBothFor(projectPath)
           setStanding(answer.standing)
         })
         .catch(() => {
@@ -333,18 +339,18 @@ export function App() {
   /*
    * The host's cover is held until this page says it is drawn (protocol 2.70.0), so the first read
    * draws no "Loading…" of its own: nothing is drawn until both histories are in, and then the page
-   * says so, once. A cover that is an answer (no project, the server down, nothing framing it) is
-   * drawn too. Never gated on being visible: the host keeps a covered page hidden, and waiting for
-   * it to be shown would hold the cover for the whole timeout.
+   * says so. A cover that is an answer (no project, the server down, nothing framing it) is drawn
+   * too. After a switch to another project the page is not drawn until that project's histories are
+   * in, and the host may cover it again in this module's words (2.84.0). Never gated on being
+   * visible: the host keeps a covered page hidden, and waiting for it to be shown would hold the
+   * cover for the whole timeout.
    */
-  const drawn = cover ? cover !== 'waiting' && cover !== 'loading' && cover !== 'stale' : both !== null
-  const saidDrawn = useRef(false)
-  const { ready } = host
+  const drawn = cover ? cover !== 'waiting' && cover !== 'loading' && cover !== 'stale' : both !== null && bothFor === projectPath
+  const { ready, loading } = host
   useEffect(() => {
-    if (!drawn || saidDrawn.current) return
-    saidDrawn.current = true
-    ready()
-  }, [drawn, ready])
+    if (drawn) ready()
+    else loading(LOADING_HISTORY)
+  }, [drawn, ready, loading])
 
   /*
    * The footer the host draws, when it draws one (2.38.0): the branch and commit, what is
