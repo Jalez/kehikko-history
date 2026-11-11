@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils.ts'
  * own min-content from that, so the whole pane is pushed wider than its frame.
  *
  * It has been measured twice in this workspace, and both numbers are worth
- * keeping because they say the same thing at two magnitudes. Checklist put a
+ * keeping because they say the same thing at two magnitudes. Another module put a
  * 407-character authored string in a shipped `Badge` and set an **1187px**
  * min-content floor under a 220px pane. Here, in the headless shell on this
  * module's own page at a 220px viewport, with the 83-character subject

@@ -25,9 +25,9 @@
  *
  * ## How it works without the other modules cooperating
  *
- * The four data modules need no change for this to work and must not be asked
- * for one — a describing scheme that required four repositories to agree would
- * be four repositories that can disagree. So this reads their files as ordinary
+ * The data modules need no change for this to work and must not be asked
+ * for one — a describing scheme that required several repositories to agree would
+ * be repositories that can disagree. So this reads their files as ordinary
  * JSON and looks for one shape they all happen to have, because it is the shape
  * data has: **records with ids, living in a named container.**
  *
@@ -39,8 +39,8 @@
  * An array of objects with ids, and an object whose keys are ids, are the same
  * thing written two ways, and both are recognised. The container's KEY is where
  * the noun comes from — `notes`, `items`, `questions`, `ticks` — which is why
- * this can say "3 questions added" without ever having heard of the Learning
- * module.
+ * this can say "3 questions added" without ever having heard of the module
+ * that keeps questions.
  *
  * ## The two things that make the messages read like sentences
  *
@@ -102,7 +102,7 @@ const LABEL_FIELDS = ['text', 'question', 'name', 'title', 'label', 'summary', '
  *
  * `path` and `file` are the common ones; `anchor` and `section` are how a module
  * points into a document; `ref` and `epic` are how a target is spelled. Nested
- * once, because Learning keeps its location under `passage`.
+ * once, because a module may keep its location under `passage`.
  */
 const WHERE_FIELDS = ['path', 'file', 'filename', 'anchor', 'section', 'ref', 'target', 'epic']
 const WHERE_NESTS = ['passage', 'target', 'at', 'location']

@@ -79,6 +79,10 @@ export const PREFERRED_PORT = 7960
  *   this pane had in front of it. A small thing, and it is the difference
  *   between a pane that comes back where you left it and one that resets to the
  *   project's history every time the canvas reloads.
+ * - **`services:read`.** Which folders under `.kehikot/` their owners declare
+ *   derived (`module.folders`, 2.85.0): a cache rebuilt from elsewhere, left out
+ *   of what the data repository stages. Asked by the server (`git/folders.ts`);
+ *   with no answer, each folder's own `.gitignore` alone decides, as before.
  * - **`events:emit` — NOT declared, and this is the deliberate omission.** It
  *   was the obvious thing to add: this module commits by itself, which is
  *   exactly the class of event a person cannot see happening. It is not declared
@@ -169,7 +173,7 @@ export const MANIFEST: Manifest = manifestSchema.parse({
   partless: 'Shows commits, which belong to no epic and no part.',
   declares: {
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,
-    uses: ['state:keep'],
+    uses: ['state:keep', 'services:read'],
     storage: true,
     prompt: false,
   },
