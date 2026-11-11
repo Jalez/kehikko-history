@@ -146,7 +146,7 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    */
   guidance:
     'This project has two histories and they are separate. Its own repository holds the work; `.kehikot/` — where '
-    + 'the Checklist, Notes, Learning and Journeys modules keep their data — MAY be a git repository of its own: it '
+    + 'other modules keep their data — MAY be a git repository of its own: it '
     + 'is one when the project ignores that folder or has no repository at all AND somebody pressed to start it, and '
     + 'deliberately not one when the project’s own repository already tracks it — two repositories over the same '
     + 'files is a state git only half tolerates. `history` with which: "kehikot" says which you are in. Where there '
