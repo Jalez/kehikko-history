@@ -468,7 +468,7 @@ export function App() {
   const fallback = fallbackShows(where, drawsHeader, pressed)
 
   return (
-    <div ref={shell} className="relative flex min-w-0 flex-col gap-2 p-2 text-foreground">
+    <div data-kehikot-page ref={shell} className="relative flex min-w-0 flex-col gap-2 p-2 text-foreground">
       {fallback ? <HeaderFallback items={items} onPress={(p) => void press.current(p)} className="absolute top-0 right-0" /> : null}
       {framed ? null : (
         <header>
