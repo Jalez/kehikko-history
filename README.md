@@ -4,7 +4,7 @@ Both of a project's histories, side by side, and the one that did not exist
 before this module.
 
 A project's own git repository holds the work. `<project>/.kehikot/` — where the
-Checklist, Notes, Learning and Journeys modules keep their data — **can be a git
+other modules keep their data — **can be a git
 repository of its own**, made and committed to by this module, when the project
 ignores that folder or has no repository at all and its history would otherwise
 not exist anywhere.

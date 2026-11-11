@@ -216,7 +216,7 @@ const WHICH_PROPERTY = {
     enum: ['project', 'kehikot'],
     description:
       'Which history. "project" is the project’s own git repository — the work. "kehikot" is the .kehikot folder '
-      + 'where the Checklist, Notes, Learning and Journeys modules keep their data, which is a separate repository '
+      + 'where other modules keep their data, which is a separate repository '
       + 'that this module made and commits to. They are not the same history and a change in one is invisible in the '
       + 'other.',
   },
@@ -268,7 +268,7 @@ function tools() {
     {
       name: 'record',
       description:
-        'Commit the .kehikot folder now — where the Checklist, Notes, Learning and Journeys modules keep this '
+        'Commit the .kehikot folder now — where other modules keep this '
         + 'project’s material — under a message you choose. Use this when you have just finished a piece of work in '
         + 'that data, because you know what you did and the automatic message only knows what the JSON looks like '
         + 'now. Commits happen by themselves a few seconds after any change, so nothing is lost if you do not call '

@@ -475,7 +475,7 @@ export function App() {
           <h1 className="text-sm font-semibold">History</h1>
           <p className="text-[0.7rem] leading-4 text-muted-foreground">
             A project’s git history, as two tabs: what is committed, and what is not yet. The .kehikot folder where
-            the Checklist, Notes, Learning and Journeys modules keep their data is part of that history when the
+            other modules keep their data is part of that history when the
             project’s own repository keeps it, and can have a repository of its own — made only when you press for it
             — when the project ignores it or has no repository at all. Where there are two, a chooser above the
             branch says which one the tabs are about.
