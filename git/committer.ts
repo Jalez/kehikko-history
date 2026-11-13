@@ -60,7 +60,7 @@ import { changed } from '../live.ts'
  *   over, because the alternative is that one crash means a data folder is never
  *   committed again until somebody finds a file they have never heard of.
  *
- * A second History process against the same project therefore does not commit,
+ * A second Source Control process against the same project therefore does not commit,
  * and says so on its own page rather than failing quietly. It still SHOWS both
  * histories — reading is safe from anywhere.
  *
@@ -195,7 +195,7 @@ export function claim(gitDir: string, pid: number = process.pid): Claim {
     return {
       ok: false,
       why:
-        `Another History process (pid ${held.pid}, since ${held.at}) is already the committer for this folder, so this `
+        `Another Source Control process (pid ${held.pid}, since ${held.at}) is already the committer for this folder, so this `
         + 'one is only reading. Two processes committing to one repository meet on index.lock and produce a failed '
         + 'operation at the worst possible moment, so exactly one holds this at a time. Both show the same history.',
       release: () => {},
@@ -691,7 +691,7 @@ export async function commitNow(
         ok: false,
         said:
           `${saying(seen.stance, found.where.kehikot)} Nothing commits into somebody's own repository by itself or `
-          + 'from a tool — that press is on the History pane, made by the person whose repository it is.',
+          + 'from a tool — that press is on the Source Control pane, made by the person whose repository it is.',
         sha: null,
       }
     }

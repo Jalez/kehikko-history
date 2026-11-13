@@ -8,12 +8,13 @@ import * as manifest from '../manifest.ts'
    "Inbox" is a host term and may stay. */
 const OTHERS = ['Journeys', 'References', 'Checklist', 'Paper', 'Slides', 'Citations', 'Notes', 'Learning', 'Source', 'Diff', 'Review', 'Explorer', 'Terminal', 'History', 'Orchestrator', 'Browser', 'Editor', 'Factory', 'Kanban', 'Monitor', 'Queue', 'Worktrees', 'Flows', 'Screenplay', 'Codex', 'Antigravity', 'OpenCode', 'Vibe'].filter((n) => n !== 'History')
 const ROOT = join(import.meta.dir, '..')
+const own = (t: string): string => t.replaceAll('Source Control', '')
 const names = new RegExp(`\\b(${OTHERS.join('|')})\\b|kehikot\\.(${OTHERS.map((n) => n.toLowerCase()).join('|')})\\b|mcp__(${OTHERS.map((n) => n.toLowerCase()).join('|')})__`)
 const ids = new RegExp(`kehikot\\.(${OTHERS.map((n) => n.toLowerCase()).join('|')})\\b`)
 
 /* Lines where a capitalised everyday word is only a word, not a module. */
 const PLAIN: string[] = []
-const found = (text: string): string[] => text.split('\n').filter((line) => names.test(line) && !PLAIN.some((one) => line.includes(one)))
+const found = (text: string): string[] => text.split('\n').filter((line) => names.test(own(line)) && !PLAIN.some((one) => line.includes(one)))
 const read = (path: string): string => (existsSync(join(ROOT, path)) ? readFileSync(join(ROOT, path), 'utf8') : '')
 
 describe('no module names another', () => {
@@ -55,7 +56,7 @@ describe('no module names another', () => {
     const hits: string[] = []
     for (const file of [...walk(ROOT), join(ROOT, 'README.md')]) {
       readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
-        if (names.test(line) || folders.test(line)) hits.push(`${relative(ROOT, file)}:${i + 1}: ${line.trim()}`)
+        if (names.test(own(line)) || folders.test(line)) hits.push(`${relative(ROOT, file)}:${i + 1}: ${line.trim()}`)
       })
     }
     expect(hits).toEqual([])

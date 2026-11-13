@@ -120,7 +120,7 @@ export const MANIFEST: Manifest = manifestSchema.parse({
   kind: MANIFEST_KIND,
   protocol: PROTOCOL,
   id: ID,
-  name: 'History',
+  name: 'Source Control',
   /* The icon a host draws beside the name: a key of the protocol's module icons, never a path
      or URL. The mark of the tool this module fronts, which identifies that tool and nothing
      else; the same key Kehikot's official list gives it. */
@@ -161,7 +161,7 @@ export const MANIFEST: Manifest = manifestSchema.parse({
   entry: '/app',
   /* What its content belongs to (protocol 2.29.0): one mode per scope, the default first. */
   modes: [
-    { id: 'history', label: 'History', scope: 'project', scopeSays: 'the git history of this project and its .kehikot folder, whatever epic is open' },
+    { id: 'history', label: 'Source Control', scope: 'project', scopeSays: 'the git history of this project and its .kehikot folder, whatever epic is open' },
   ],
   mcp: {
     url: '/mcp',

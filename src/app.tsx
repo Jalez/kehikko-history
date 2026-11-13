@@ -63,7 +63,7 @@ import { History } from '@/view/history.tsx'
  * ## Identity is printed only when nothing is framing this page
  *
  * A host prints the module's name in the pane header and hangs the manifest's
- * `summary` off it as a tooltip. A page that also printed "History" at the top
+ * `summary` off it as a tooltip. A page that also printed "Source Control" at the top
  * of itself would be saying the name twice and spending a fixed strip of a
  * 340-pixel-tall pane on the repetition. The test is `window.parent !== window`,
  * which is answerable before first paint and therefore does not blink.
@@ -478,7 +478,7 @@ export function App() {
       {fallback ? <HeaderFallback items={items} onPress={(p) => void press.current(p)} className="absolute top-0 right-0" /> : null}
       {framed ? null : (
         <header>
-          <h1 className="text-sm font-semibold">History</h1>
+          <h1 className="text-sm font-semibold">Source Control</h1>
           <p className="text-[0.7rem] leading-4 text-muted-foreground">
             A project’s git history, as two tabs: what is committed, and what is not yet. The .kehikot folder where
             other modules keep their data is part of that history when the
@@ -536,7 +536,7 @@ export function App() {
       {cover ? (
         <Cover
           state={cover}
-          name="History"
+          name="Source Control"
           onRetry={() => setAgain((n) => n + 1)}
           /* A name is not a path, and this pane will not guess: a guess here is `git init` in a folder nobody chose. */
           detail={cover === 'no-project' && project ? `Kehikot named “${project}” but not where it is on this machine.` : null}

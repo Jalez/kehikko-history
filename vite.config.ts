@@ -29,7 +29,7 @@ export default defineConfig({
   base: './',
   plugins: [
     serves({ id: ID, prefer: PREFERRED_PORT }),
-    doors({ manifest: MANIFEST, answer, stream, build: BUILD, page: { title: 'History', ticket: TICKET } }),
+    doors({ manifest: MANIFEST, answer, stream, build: BUILD, page: { title: 'Source Control', ticket: TICKET } }),
     react(),
     tailwindcss(),
   ],
