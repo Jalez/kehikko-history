@@ -559,7 +559,7 @@ describe('discarding some of what is uncommitted, by name', () => {
       'push',
       '--include-untracked',
       '-m',
-      'discarded from the History pane',
+      'discarded from the Source Control pane',
       '--',
       ':(literal,top)notes/notes.json',
       ':(literal,top)questions',

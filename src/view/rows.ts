@@ -3,7 +3,7 @@ import { footerItems, troubleFooter } from '@/view/footer.ts'
 import { headerOf } from '@/view/header.ts'
 
 /**
- * The rows History declares to a host that draws a header and a footer, one state per moment
+ * the rows Source Control declares to a host that draws a header and a footer, one state per moment
  * worth checking, for `kehikot-check-rows` (protocol 2.70.0). Built from the real header and footer
  * functions, so `kehikot.rows.json` (written by `bun run rows`, held equal to this by
  * `test/rows.test.ts`) cannot drift from what the page sends.

@@ -1061,7 +1061,7 @@ describe('the not-ready moments, each as the one shared cover', () => {
     render(<App />)
     await greet({ project: 'p', projectPath: '/tmp/p' })
     expect(cover()?.getAttribute('data-cover')).toBe('down')
-    expect(document.body.textContent).toContain('History’s own server is not answering.')
+    expect(document.body.textContent).toContain('Source Control’s own server is not answering.')
     down = false
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Try again' }))

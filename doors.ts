@@ -179,7 +179,7 @@ async function rootFor(
         ok: false,
         why:
           `${found.where.kehikot} is not a repository of its own, so there is nothing there to act on. `
-          + (seen.why ?? 'Start a history for it from the History pane if you want one.'),
+          + (seen.why ?? 'Start a history for it from the Source Control pane if you want one.'),
       }
     }
     return { ok: true, cwd: found.where.kehikot }

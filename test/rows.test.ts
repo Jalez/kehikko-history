@@ -8,7 +8,7 @@ import { rowsStates } from '../src/view/rows.ts'
 
 /* `kehikot.rows.json` is what `kehikot-check-rows` reads in CI. It is written from the real footer
    (`bun run rows`); this holds the file equal to it, and the rule satisfied by every state. */
-describe('the rows History declares', () => {
+describe('the rows Source Control declares', () => {
   test('kehikot.rows.json is what the footer function says (run `bun run rows` after changing it)', () => {
     const file = JSON.parse(readFileSync(join(import.meta.dir, '..', 'kehikot.rows.json'), 'utf8'))
     expect(file).toEqual(JSON.parse(JSON.stringify(rowsStates())))

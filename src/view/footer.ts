@@ -4,7 +4,7 @@ import type { Reading } from '@/store/ask.ts'
 import { pullControl, pushControl, type Control } from '@/view/upstream.ts'
 
 /**
- * History's footer, in a host that draws one (`kehikot.footer`, protocol 2.38.0): where the
+ * Source Control's footer, in a host that draws one (`kehikot.footer`, protocol 2.38.0): where the
  * repository stands now, and the two presses that act on it. A container folded to its header and
  * footer still says which branch it is on, what is uncommitted and how far it is from its remote.
  *

@@ -315,7 +315,7 @@ export async function ensure(where: Where, git: GitRunner, stance: Stance, asked
   if (!existsSync(ignore)) {
     writeFileSync(
       ignore,
-      '# This folder is a git repository of its own, made and committed to by the History\n'
+      '# This folder is a git repository of its own, made and committed to by the Source Control\n'
         + '# module. What is in it is authored data — checklists, notes, questions,\n'
         + '# journeys — and all of it is meant to be committed. The one thing that is not\n'
         + '# is a derived cache, and a cache says so in a .gitignore of its own inside its\n'
@@ -867,7 +867,7 @@ export async function restore(
 
 /** Put uncommitted work aside, which is the way forward this module offers instead of forcing anything. */
 export async function stash(cwd: string, git: GitRunner): Promise<Moved> {
-  const done = await git(['stash', 'push', '--include-untracked', '-m', 'set aside from the History pane'], { cwd })
+  const done = await git(['stash', 'push', '--include-untracked', '-m', 'set aside from the Source Control pane'], { cwd })
   if (!done.ok) return { ok: false, said: (done.err || done.out).trim() || 'git refused to stash.', wouldLose: [] }
   if (/No local changes/i.test(done.out)) return { ok: true, said: 'There was nothing to set aside.', wouldLose: [] }
   return {
@@ -1014,7 +1014,7 @@ export async function discard(cwd: string, raw: unknown, git: GitRunner): Promis
   const named = specsFor(raw)
   if (!named.ok) return { ok: false, said: named.why, wouldLose: [] }
   const done = await git(
-    ['stash', 'push', '--include-untracked', '-m', 'discarded from the History pane', '--', ...named.specs],
+    ['stash', 'push', '--include-untracked', '-m', 'discarded from the Source Control pane', '--', ...named.specs],
     { cwd },
   )
   if (!done.ok) return { ok: false, said: (done.err || done.out).trim() || 'git refused to discard those.', wouldLose: [] }

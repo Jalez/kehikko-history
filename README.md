@@ -277,7 +277,7 @@ committers:
   means a data folder is never committed again until somebody finds a file they
   have never heard of.
 
-A second History process against the same project **does not commit**, and says
+A second Source Control process against the same project **does not commit**, and says
 so on its own page. It still shows both histories — reading is safe from
 anywhere.
 
