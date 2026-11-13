@@ -142,13 +142,14 @@ describe('news is published where the histories change', () => {
     expect(heard.length).toBeGreaterThan(edited)
   })
 
-  test('a watcher nobody follows any more closes at its next event', async () => {
+  test('a watcher nobody follows any more closes as the last page lets go, with no event needed', () => {
     const project = scratch()
+    follow(project)
     follow(project)
     expect(watcherCount()).toBe(1)
     open.pop()!.close()
-    writeFileSync(join(project, 'thesis.tex'), 'x')
-    await settle()
+    expect(watcherCount()).toBe(1)
+    open.pop()!.close()
     expect(watcherCount()).toBe(0)
   })
 })

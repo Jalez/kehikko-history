@@ -103,11 +103,39 @@ export function stopWatching(): void {
 /** How many watchers are open, for tests. */
 export const watcherCount = (): number => watchers.size
 
-/** The doors' `stream` option: `/api/histories/events?project=…`. No project is a topic too: nothing ever changes on it. */
-export const stream = events((path, query) => {
+/** Close `topic`'s watcher now, when nobody follows it. */
+function release(topic: string): void {
+  if (watching(topic) > 0) return
+  const watcher = watchers.get(topic)
+  if (!watcher) return
+  watcher.close()
+  watchers.delete(topic)
+}
+
+const route = events((path, query) => {
   if (path !== EVENTS_PATH) return null
   const project = query.get('project')?.trim() || null
   const topic = topicOf(project)
   if (project) watchProject(topic, project)
   return { topic, initial: NEWS }
 })
+
+/**
+ * The doors' `stream` option: `/api/histories/events?project=…`. No project is a topic too: nothing ever changes on it.
+ *
+ * The watcher goes when the last page that followed it lets go, not at some later file event: a
+ * watcher's next event may be a long time coming (or never), and until then it would hold a
+ * recursive watch over a project nobody is looking at.
+ */
+export const stream: typeof route = (method, path, query, emit, ticket) => {
+  const live = route(method, path, query, emit, ticket)
+  if (!live || !('close' in live)) return live
+  const topic = topicOf(query.get('project')?.trim() || null)
+  return {
+    ...live,
+    close: () => {
+      live.close()
+      release(topic)
+    },
+  }
+}
